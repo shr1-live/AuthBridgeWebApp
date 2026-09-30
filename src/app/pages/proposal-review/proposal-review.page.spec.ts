@@ -42,7 +42,7 @@ describe('ProposalReviewPage', () => {
       providers: [
         provideRouter([{ path: '**', children: [] }]),
         { provide: ApiService, useValue: api },
-        { provide: CallerService, useValue: { canWrite: signal(canWrite) } },
+        { provide: CallerService, useValue: { canWrite: signal(canWrite), caller: signal({ displayLabel: 'Demo Coordinator', role: 'Coordinator' }) } },
       ],
     });
     const fixture = TestBed.createComponent(ProposalReviewPage);
@@ -66,14 +66,22 @@ describe('ProposalReviewPage', () => {
     expect(api.approve).not.toHaveBeenCalled();
   });
 
-  it('requires the confirmation tick before Approve is enabled, then approves on click', async () => {
+  it('requires all three assurances before Approve is enabled, then approves on click', async () => {
     api.approve.mockReturnValue(of(proposal({ state: 'Approved', approvedAtUtc: new Date().toISOString() })));
     const fixture = await render(proposal());
     const root = fixture.nativeElement as HTMLElement;
     const approve = root.querySelector<HTMLButtonElement>('form button[type=submit]')!;
+    const boxes = root.querySelectorAll<HTMLInputElement>('input[type=checkbox]');
+    expect(boxes.length).toBe(3);
     expect(approve.disabled).toBe(true);
 
-    root.querySelector<HTMLInputElement>('input[type=checkbox]')!.click();
+    boxes[0].click();
+    boxes[1].click();
+    fixture.detectChanges();
+    expect(approve.disabled).toBe(true);
+    expect(api.approve).not.toHaveBeenCalled();
+
+    boxes[2].click();
     fixture.detectChanges();
     expect(approve.disabled).toBe(false);
     approve.click();
@@ -99,7 +107,9 @@ describe('ProposalReviewPage', () => {
   it('reuses one idempotency key for repeated submit clicks', async () => {
     api.submit.mockReturnValue(of({ attemptId: 'a-1' }));
     const fixture = await render(proposal({ state: 'Approved', approvedAtUtc: new Date().toISOString() }));
-    const button = (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>('section.card button')!;
+    const buttons = (fixture.nativeElement as HTMLElement).querySelectorAll<HTMLButtonElement>('.actions-end button');
+    const button = buttons[buttons.length - 1];
+    expect(button.textContent).toContain('Submit Authorization Request');
     button.click();
     const firstKey = api.submit.mock.calls[0][1];
     fixture.componentInstance['busy'].set(false);

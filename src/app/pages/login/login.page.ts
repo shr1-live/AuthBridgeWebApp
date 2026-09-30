@@ -2,59 +2,68 @@ import { Component, OnInit, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { AuthService, LocalDevUser } from '../../core/auth/auth.service';
+import { initials } from '../../shared/ui';
 
 @Component({
   selector: 'ab-login-page',
   imports: [ReactiveFormsModule],
   template: `
-    <section class="card narrow">
-      <h1>Sign in</h1>
-      @if (reason() === 'expired') {
-        <div class="panel info" role="status">Your session expired. Sign in again to continue.</div>
-      }
+    <div class="center-page">
+      <section class="card dialog login">
+        <div class="dialog-head">
+          <span class="brand-mark"><img src="icons/logo-shield.svg" width="16" height="16" alt="" /></span>
+          <div>
+            <h1>Sign in to AuthBridge</h1>
+            <p class="muted">Prior authorizations, approved by humans</p>
+          </div>
+        </div>
 
-      @if (auth.mode === 'supabase') {
-        <form [formGroup]="form" (ngSubmit)="signIn()" novalidate>
-          <label>
-            Email
-            <input type="email" formControlName="email" autocomplete="username" />
-          </label>
-          <label>
-            Password
-            <input type="password" formControlName="password" autocomplete="current-password" />
-          </label>
-          <button type="submit" [disabled]="form.invalid || busy()">{{ busy() ? 'Signing in…' : 'Sign in' }}</button>
-        </form>
-      } @else {
-        <p class="muted">
-          Local development sign-in. The backend issues these tokens only in its Development environment; deployed
-          builds sign in through Supabase Auth.
-        </p>
-        @if (users().length === 0 && !error()) {
-          <p class="muted">Loading demo users…</p>
+        @if (reason() === 'expired') {
+          <div class="panel info" role="status"><img src="icons/info-16.svg" width="16" height="16" alt="" /><p>Your session expired. Sign in again to continue.</p></div>
         }
-        <ul class="user-list">
-          @for (user of users(); track user.subjectId) {
-            <li>
-              <button type="button" (click)="signInAs(user)" [disabled]="busy()">
-                {{ user.displayLabel }}
-              </button>
-              <span class="meta">{{ user.tenantId }} · {{ user.role }}{{ user.isActive ? '' : ' · inactive' }}</span>
-            </li>
-          }
-        </ul>
-      }
 
-      @if (error(); as message) {
-        <div class="panel error" role="alert">{{ message }}</div>
-      }
-    </section>
+        @if (auth.mode === 'supabase') {
+          <form class="stack" style="gap: 16px" [formGroup]="form" (ngSubmit)="signIn()" novalidate>
+            <label class="field">Email<input type="email" formControlName="email" autocomplete="username" /></label>
+            <label class="field">Password<input type="password" formControlName="password" autocomplete="current-password" /></label>
+            <button type="submit" [disabled]="form.invalid || busy()">{{ busy() ? 'Signing in…' : 'Sign in' }}</button>
+          </form>
+        } @else {
+          <p class="muted">
+            Development sign-in: choose a demo user. The backend issues these tokens only in Development; deployed builds sign in through Supabase Auth.
+          </p>
+          @if (users().length === 0 && !error()) {
+            <p class="muted">Loading demo users…</p>
+          }
+          <div class="user-grid">
+            @for (user of users(); track user.subjectId) {
+              <button type="button" class="user-option" [class.inactive]="!user.isActive" (click)="signInAs(user)" [disabled]="busy()">
+                <span class="avatar">{{ initials(user.displayLabel) }}</span>
+                <span>
+                  <span>{{ user.displayLabel }}</span>
+                  <span class="meta">
+                    <span class="pill tone-neutral">{{ user.tenantId }}</span>
+                    <span class="pill" [class.tone-teal]="user.role === 'Coordinator'" [class.tone-info]="user.role !== 'Coordinator'">{{ user.role }}</span>
+                    @if (!user.isActive) { <span class="pill tone-danger">inactive</span> }
+                  </span>
+                </span>
+              </button>
+            }
+          </div>
+        }
+
+        @if (error(); as message) {
+          <div class="panel error" role="alert"><img src="icons/alert-circle.svg" width="16" height="16" alt="" /><p>{{ message }}</p></div>
+        }
+      </section>
+    </div>
   `,
 })
 export class LoginPage implements OnInit {
   protected readonly auth = inject(AuthService);
   private readonly router = inject(Router);
   private readonly route = inject(ActivatedRoute);
+  protected readonly initials = initials;
 
   protected readonly form = inject(FormBuilder).nonNullable.group({
     email: ['', [Validators.required, Validators.email]],
@@ -95,6 +104,6 @@ export class LoginPage implements OnInit {
       return;
     }
     const returnUrl = this.route.snapshot.queryParamMap.get('returnUrl');
-    await this.router.navigateByUrl(returnUrl?.startsWith('/') && !returnUrl.startsWith('//') ? returnUrl : '/authorizations');
+    await this.router.navigateByUrl(returnUrl?.startsWith('/') && !returnUrl.startsWith('//') ? returnUrl : '/dashboard');
   }
 }

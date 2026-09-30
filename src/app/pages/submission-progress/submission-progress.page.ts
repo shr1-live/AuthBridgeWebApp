@@ -22,36 +22,61 @@ const MAX_POLL_MS = 15 * 60_000;
     <ab-error [error]="error()" (retry)="poll()" />
 
     @if (submission(); as s) {
-      <p><a [routerLink]="['/authorizations', s.authorizationId]">← {{ s.authorizationId }}</a></p>
-      <h1>Submission progress</h1>
+      <nav class="crumbs" aria-label="Breadcrumb">
+        <a routerLink="/authorizations">Request Queue</a>
+        <img src="icons/chevron-right.svg" width="12" height="12" alt="" />
+        <a [routerLink]="['/authorizations', s.authorizationId]">{{ s.authorizationId }}</a>
+        <img src="icons/chevron-right.svg" width="12" height="12" alt="" />
+        <strong>Submission</strong>
+      </nav>
 
-      <ol class="steps">
-        <li [class.done]="true">Queued with the simulated payer · {{ s.createdAtUtc | date: 'mediumTime' }}</li>
-        <li [class.done]="reviewing()" [class.current]="s.state === 'Processing' || (s.state === 'Failed' && !decided())">
-          Under review
-          @if (s.state === 'Failed' && !decided()) {
-            <span class="warn">— {{ s.lastError }} (attempt {{ s.failureCount }})</span>
-          }
-        </li>
-        <li [class.done]="decided()">
-          Decision
+      <div class="center-page">
+        <section class="card dialog">
+          <div class="dialog-head">
+            <span class="dialog-icon"><img src="icons/shield-check-teal.svg" width="24" height="24" alt="" /></span>
+            <div style="flex: 1">
+              <h1>Submission Progress</h1>
+              <p class="muted">{{ s.authorizationId }} with the simulated payer</p>
+            </div>
+            <ab-status [status]="s.state" />
+          </div>
+
+          <div class="timeline">
+            <div class="tl">
+              <img src="icons/dot-done.svg" width="16" height="16" alt="" />
+              <div><div class="h">Queued with the simulated payer</div><div class="d"><time>{{ s.createdAtUtc | date: 'h:mm:ss a' }}</time></div></div>
+            </div>
+            <div class="tl">
+              <img [src]="'icons/dot-' + (decided() ? 'done' : reviewing() ? 'current' : 'future') + '.svg'" width="16" height="16" alt="" />
+              <div>
+                <div class="h" [class.current]="reviewing() && !decided()" [class.future]="!reviewing()">Under review</div>
+                @if (s.state === 'Failed' && !decided()) {
+                  <div class="d" style="color: var(--warning)">{{ s.lastError }} (attempt {{ s.failureCount }})</div>
+                } @else {
+                  <div class="d">The payer simulator checks the request</div>
+                }
+              </div>
+            </div>
+            <div class="tl">
+              <img [src]="'icons/dot-' + (decided() ? 'current' : 'future') + '.svg'" width="16" height="16" alt="" />
+              <div><div class="h" [class.current]="decided()" [class.future]="!decided()">Decision</div>
+                <div class="d">{{ decided() ? 'Recorded ' : 'Pending' }}@if (s.completedAtUtc) { · <time>{{ s.completedAtUtc | date: 'h:mm:ss a' }}</time> }</div></div>
+            </div>
+          </div>
+
           @if (decided()) {
-            : <ab-status [status]="s.requestStatus" /> · reference <code>{{ s.payerReference }}</code> ·
-            {{ s.completedAtUtc | date: 'mediumTime' }}
+            <div class="summary" [style.background]="s.requestStatus === 'Approved' ? 'var(--success-soft)' : 'var(--danger-soft)'">
+              <div class="dialog-head">
+                <ab-status [status]="s.requestStatus" />
+                <span class="muted">Payer reference</span><code>{{ s.payerReference }}</code>
+              </div>
+              <p class="muted">Simulated outcome — no real payer was contacted.</p>
+            </div>
           } @else {
-            <span class="muted">— pending</span>
+            <p class="muted">Checking every few seconds. Decisions come from the fixture scenario and can pause while the free backend is asleep.</p>
           }
-        </li>
-      </ol>
-
-      @if (!decided()) {
-        <p class="muted">
-          Checking every few seconds. Decisions are simulated from the fixture scenario and can pause while the free
-          backend is asleep.
-        </p>
-      } @else {
-        <p class="muted">Simulated outcome — no real payer was contacted.</p>
-      }
+        </section>
+      </div>
     }
   `,
 })

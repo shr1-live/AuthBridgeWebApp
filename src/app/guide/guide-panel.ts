@@ -52,11 +52,21 @@ function helpFor(url: string): PageHelp {
         'Every change carries the version you loaded. If someone changed it first, you are asked to reload.',
       ],
     };
+  if (url.startsWith('/dashboard'))
+    return {
+      title: 'Dashboard',
+      what: 'An overview of your tenant: what is pending, what is with the payer, and what needs you.',
+      points: [
+        'The numbers come from the same list the Request Queue shows.',
+        '"Needs Attention" links straight to requests that are missing documents or ready for approval.',
+        'Everything here is synthetic demo data.',
+      ],
+    };
   return {
-    title: 'Request list',
+    title: 'Request Queue',
     what: 'All prior-authorization requests for your tenant.',
     points: [
-      'Filter by status, payer or service, or search by ID.',
+      'Filters apply the moment you change them; paging always uses the filters you see.',
       'Statuses run Draft, Awaiting Documents, Ready to Submit, Submitted, Under Review, then Approved or Denied.',
       'All data is synthetic demo data.',
     ],
