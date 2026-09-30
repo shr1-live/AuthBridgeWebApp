@@ -13,7 +13,7 @@ describe('ApiService', () => {
       providers: [
         provideHttpClient(),
         provideHttpClientTesting(),
-        { provide: APP_CONFIG, useValue: { apiBaseUrl: 'https://api.test', authMode: 'localDev', supabaseUrl: '', supabasePublishableKey: '' } },
+        { provide: APP_CONFIG, useValue: { apiBaseUrl: 'https://api.test', authMode: 'localDev' } },
       ],
     });
     api = TestBed.inject(ApiService);

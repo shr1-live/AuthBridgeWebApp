@@ -6,7 +6,7 @@ import { APP_CONFIG, AppConfig } from '../config';
 import { authInterceptor } from './auth.interceptor';
 import { AuthService } from './auth.service';
 
-const config: AppConfig = { apiBaseUrl: 'https://api.test', authMode: 'localDev', supabaseUrl: '', supabasePublishableKey: '' };
+const config: AppConfig = { apiBaseUrl: 'https://api.test', authMode: 'localDev' };
 
 async function flushMicrotasks(): Promise<void> {
   for (let i = 0; i < 5; i++) await Promise.resolve();

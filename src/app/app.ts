@@ -55,7 +55,7 @@ import { CallerService, PageService, StateCard, ThemeService, Toasts, initials }
                       {{ callers.caller()?.displayLabel || auth.label() }}
                     </div>
                     <div class="cap" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis">
-                      {{ auth.mode === 'supabase' ? auth.label() : 'Development sign-in' }}
+                      {{ auth.mode === 'demo' ? 'Synthetic demo' : 'Development sign-in' }}
                     </div>
                   </div>
                 </div>

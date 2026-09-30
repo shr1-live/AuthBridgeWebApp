@@ -1,5 +1,4 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
-import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { AuthService, LocalDevUser } from '../../core/auth/auth.service';
 import { Icon } from '../../shared/icon';
@@ -7,7 +6,7 @@ import { initials } from '../../shared/ui';
 
 @Component({
   selector: 'ab-login-page',
-  imports: [ReactiveFormsModule, Icon],
+  imports: [Icon],
   template: `
     <div class="login">
       <section class="brand-panel" aria-label="About AuthBridge">
@@ -40,26 +39,9 @@ import { initials } from '../../shared/ui';
             </div>
           }
 
-          @if (auth.mode === 'supabase') {
             <section class="card">
-              <h2 class="h2">Sign in</h2>
-              <p class="cap" style="margin-top: 2px">Use your coordinator account.</p>
-              <form [formGroup]="form" (ngSubmit)="signIn()" novalidate style="display: flex; flex-direction: column; gap: 18px; margin-top: 20px">
-                <div class="field"><label class="lbl" for="email">Work email</label>
-                  <input class="inp" id="email" type="email" formControlName="email" autocomplete="username" /></div>
-                <div class="field"><label class="lbl" for="password">Password</label>
-                  <input class="inp" id="password" type="password" formControlName="password" autocomplete="current-password" [class.is-err]="!!error()" />
-                  @if (error(); as message) { <p class="err-txt"><ab-icon name="alert-circle" [size]="14" />{{ message }}</p> }
-                </div>
-                <button type="submit" class="btn btn-pri btn-block" [disabled]="form.invalid || busy()">
-                  @if (busy()) { <span class="spin"></span><span>Signing in…</span> } @else { <span>Sign in</span> }
-                </button>
-              </form>
-            </section>
-          } @else {
-            <section class="card">
-              <h2 class="h3">Development sign-in</h2>
-              <p class="cap" style="margin-top: 2px">Pick a seeded user. Passwords are not checked.</p>
+              <h2 class="h3">Synthetic demo sign-in</h2>
+              <p class="cap" style="margin-top: 2px">Pick a seeded demo user. No external identity provider is used.</p>
               @if (users().length === 0 && !error()) {
                 <div class="dev-grid" style="margin-top: 16px">
                   @for (i of [1, 2, 3, 4]; track i) { <div class="card tight"><div class="sk" style="height: 36px; width: 60%"></div><div class="sk" style="height: 12px; width: 80%; margin-top: 12px"></div></div> }
@@ -84,9 +66,8 @@ import { initials } from '../../shared/ui';
               @if (error(); as message) {
                 <div class="alert a-danger" role="alert" style="margin-top: 16px"><ab-icon name="alert-circle" [size]="18" /><div><p class="at">Can't sign in</p><p class="ad">{{ message }}</p></div></div>
               }
-              <p class="cap" style="margin-top: 16px">Development sign-in is disabled in any environment that is not a demo. Deployed builds sign in through Supabase Auth.</p>
+              <p class="cap" style="margin-top: 16px">For demonstration only. No real patient, payer, or clinical data.</p>
             </section>
-          }
         </div>
       </div>
     </div>
@@ -100,10 +81,6 @@ export class LoginPage implements OnInit {
   /** The tenant chip already shows the tenant, so drop a trailing "(Tenant A)". */
   protected readonly shortName = (label: string) => label.replace(/\s*\(.*\)\s*$/, '');
 
-  protected readonly form = inject(FormBuilder).nonNullable.group({
-    email: ['', [Validators.required, Validators.email]],
-    password: ['', [Validators.required]],
-  });
   protected readonly users = signal<LocalDevUser[]>([]);
   protected readonly busy = signal(false);
   protected readonly error = signal<string | null>(null);
@@ -112,7 +89,7 @@ export class LoginPage implements OnInit {
   async ngOnInit(): Promise<void> {
     document.title = 'Sign in · AuthBridge';
     this.reason.set(this.route.snapshot.queryParamMap.get('reason'));
-    if (this.auth.mode === 'localDev') {
+    if (this.auth.mode === 'localDev' || this.auth.mode === 'demo') {
       try {
         const rank = (u: LocalDevUser) => (u.isActive ? 0 : 2) + (u.role === 'Coordinator' ? 0 : 1);
         const users = await this.auth.localDevUsers();
@@ -121,11 +98,6 @@ export class LoginPage implements OnInit {
         this.error.set('The backend is not reachable. Start it with: dotnet run --project src/AuthBridge.Api');
       }
     }
-  }
-
-  protected async signIn(): Promise<void> {
-    if (this.form.invalid) return;
-    await this.run(() => this.auth.signInWithPassword(this.form.controls.email.value, this.form.controls.password.value));
   }
 
   protected signInAs(user: LocalDevUser): Promise<void> {

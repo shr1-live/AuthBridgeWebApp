@@ -1,6 +1,5 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { Router } from '@angular/router';
-import type { SupabaseClient } from '@supabase/supabase-js';
 import { APP_CONFIG } from '../config';
 
 export interface LocalDevUser {
@@ -29,7 +28,6 @@ interface LocalDevSession {
 export class AuthService {
   private readonly config = inject(APP_CONFIG);
   private readonly router = inject(Router);
-  private supabase: SupabaseClient | null = null;
 
   private readonly identity = signal<string | null>(null);
   readonly signedIn = computed(() => this.identity() !== null);
@@ -37,38 +35,18 @@ export class AuthService {
   readonly mode = this.config.authMode;
 
   async init(): Promise<void> {
-    if (this.config.authMode === 'supabase') {
-      // Loaded on demand so local-dev builds and first paint do not carry the client.
-      const { createClient } = await import('@supabase/supabase-js');
-      this.supabase = createClient(this.config.supabaseUrl, this.config.supabasePublishableKey, {
-        auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false },
-      });
-      const { data } = await this.supabase.auth.getSession();
-      this.identity.set(data.session?.user.email ?? (data.session ? 'Signed in' : null));
-      this.supabase.auth.onAuthStateChange((event, session) => {
-        this.identity.set(session?.user.email ?? (session ? 'Signed in' : null));
-        if (event === 'SIGNED_OUT') void this.router.navigate(['/login']);
-      });
-    } else {
-      const session = this.readLocal();
-      this.identity.set(session?.label ?? null);
-    }
-  }
-
-  async signInWithPassword(email: string, password: string): Promise<string | null> {
-    if (!this.supabase) return 'Supabase sign-in is not configured for this build.';
-    const { error } = await this.supabase.auth.signInWithPassword({ email, password });
-    return error ? error.message : null;
+    const session = this.readLocal();
+    this.identity.set(session?.label ?? null);
   }
 
   async localDevUsers(): Promise<LocalDevUser[]> {
-    const response = await fetch(`${this.config.apiBaseUrl}/dev/users`);
+    const response = await fetch(`${this.config.apiBaseUrl}/${this.config.authMode === 'demo' ? 'demo' : 'dev'}/users`);
     if (!response.ok) throw new Error(`Local sign-in unavailable (${response.status}).`);
     return (await response.json()) as LocalDevUser[];
   }
 
   async signInLocalDev(user: LocalDevUser): Promise<string | null> {
-    const response = await fetch(`${this.config.apiBaseUrl}/dev/token`, {
+    const response = await fetch(`${this.config.apiBaseUrl}/${this.config.authMode === 'demo' ? 'demo' : 'dev'}/token`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ subjectId: user.subjectId }),
@@ -85,12 +63,8 @@ export class AuthService {
     return null;
   }
 
-  /** Current access token; the Supabase client refreshes it transparently when near expiry. */
+  /** Current short-lived demo access token. */
   async accessToken(): Promise<string | null> {
-    if (this.supabase) {
-      const { data } = await this.supabase.auth.getSession();
-      return data.session?.access_token ?? null;
-    }
     const session = this.readLocal();
     if (!session) {
       this.identity.set(null);
@@ -101,16 +75,13 @@ export class AuthService {
 
   /** Forces a refresh after a 401. Returns false when the session cannot be renewed. */
   async refresh(): Promise<boolean> {
-    if (!this.supabase) return false;
-    const { data, error } = await this.supabase.auth.refreshSession();
-    return !error && !!data.session;
+    return false;
   }
 
   async signOut(reason?: 'expired'): Promise<void> {
     // Leave the current page first: clearing the session while it is still mounted would
     // re-render it once without a token and fire unauthenticated requests.
     await this.router.navigate(['/login'], { queryParams: reason ? { reason } : {} });
-    if (this.supabase) await this.supabase.auth.signOut();
     sessionStorage.removeItem(LOCAL_DEV_KEY);
     this.identity.set(null);
   }
