@@ -26,7 +26,7 @@ function helpFor(url: string): PageHelp {
       title: 'Review and approve',
       what: 'The one place where a submission gets approved, and only a person can do it.',
       points: [
-        'The countdown shows the 5-minute expiry. After that, prepare a new proposal.',
+        'The ring counts down the 5-minute expiry: amber under a minute, red under thirty seconds.',
         'If the request changes after preparation, the proposal becomes Stale.',
         'After approval, submit here or let the AI assistant submit it.',
       ],
@@ -52,21 +52,25 @@ function helpFor(url: string): PageHelp {
         'Every change carries the version you loaded. If someone changed it first, you are asked to reload.',
       ],
     };
-  if (url.startsWith('/dashboard'))
+  if (url.startsWith('/submissions'))
     return {
-      title: 'Dashboard',
-      what: 'An overview of your tenant: what is pending, what is with the payer, and what needs you.',
-      points: [
-        'The numbers come from the same list the Request Queue shows.',
-        '"Needs Attention" links straight to requests that are missing documents or ready for approval.',
-        'Everything here is synthetic demo data.',
-      ],
+      title: 'Submissions',
+      what: 'Requests that have been sent to the simulated payer, newest first.',
+      points: ['Open one to follow its progress or see the decision.', 'Decisions come from fixture scenarios, never from an AI.'],
+    };
+  if (url.startsWith('/activity'))
+    return {
+      title: 'Activity',
+      what: 'Every recent status change across your tenant.',
+      points: ['Each entry shows who changed what, when, and why.', 'Changes made by the simulated payer are labelled as such.'],
     };
   return {
-    title: 'Request Queue',
+    title: 'Requests',
     what: 'All prior-authorization requests for your tenant.',
     points: [
+      'The four KPI cards filter the list when clicked.',
       'Filters apply the moment you change them; paging always uses the filters you see.',
+      'Switch between Table and Cards; your choice is remembered.',
       'Statuses run Draft, Awaiting Documents, Ready to Submit, Submitted, Under Review, then Approved or Denied.',
       'All data is synthetic demo data.',
     ],
@@ -80,11 +84,11 @@ function helpFor(url: string): PageHelp {
     @if (guide.open()) {
       <aside class="guide" aria-label="Guide">
         <header class="guide-head">
-          <strong>Guide</strong>
-          <span class="guide-progress">{{ guide.completedCount() }}/{{ guide.steps.length }}</span>
-          <button type="button" class="ghost" (click)="guide.toggle()" aria-label="Hide guide">✕</button>
+          <strong class="h3">Guide</strong>
+          <span class="guide-progress cap">{{ guide.completedCount() }}/{{ guide.steps.length }}</span>
+          <button type="button" class="btn btn-ghost btn-sm" style="width: 32px; padding: 0" (click)="guide.toggle()" aria-label="Hide guide">✕</button>
         </header>
-        <div class="guide-bar"><span [style.width.%]="percent()"></span></div>
+        <div class="bar"><i [style.width.%]="percent()"></i></div>
 
         <details class="guide-card">
           <summary>What is AuthBridge?</summary>
@@ -119,7 +123,7 @@ function helpFor(url: string): PageHelp {
           <h3>Walkthrough</h3>
           @if (guide.current(); as step) {
             <div class="guide-now">
-              <span class="guide-label">Do this next</span>
+              <span class="guide-label up">Do this next</span>
               <strong>{{ step.title }}</strong>
               <p>{{ step.doing }}</p>
               <p class="muted"><b>Behind the scenes:</b> {{ step.behind }}</p>
@@ -133,7 +137,7 @@ function helpFor(url: string): PageHelp {
                 <p class="guide-tech"><span>MCP</span><em>{{ step.mcpNote }}</em></p>
               }
               @if (step.link && !onPage(step.link)) {
-                <a class="button-link" [routerLink]="step.link">Take me there →</a>
+                <a class="btn btn-pri btn-sm" style="margin-top: 6px" [routerLink]="step.link">Take me there →</a>
               }
             </div>
           } @else {
@@ -151,11 +155,9 @@ function helpFor(url: string): PageHelp {
               <li [class.done]="guide.isDone(s.id)" [class.current]="guide.current()?.id === s.id">{{ s.title }}</li>
             }
           </ol>
-          <button type="button" class="secondary small" (click)="guide.restart()">Restart walkthrough</button>
+          <button type="button" class="btn btn-sec btn-sm" (click)="guide.restart()">Restart walkthrough</button>
         </section>
       </aside>
-    } @else {
-      <button type="button" class="guide-fab" (click)="guide.toggle()" aria-label="Show guide">? Guide</button>
     }
   `,
 })

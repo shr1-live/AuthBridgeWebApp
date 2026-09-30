@@ -1,5 +1,5 @@
 import { DatePipe } from '@angular/common';
-import { Component, OnInit, computed, inject, input, signal } from '@angular/core';
+import { Component, OnInit, computed, effect, inject, input, signal, untracked } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
@@ -8,198 +8,229 @@ import { ApiService } from '../../core/api/api.service';
 import { UiError, toUiError } from '../../core/api/api-error';
 import { AuthorizationStatusDetail, DocumentFixture, HistoryEntry, MissingDocuments } from '../../core/api/models';
 import { GuideService } from '../../guide/guide.service';
-import { CallerService, ErrorPanel, StatusBadge, WakingNotice, retryWhileWaking } from '../../shared/ui';
+import { Icon } from '../../shared/icon';
+import {
+  CallerService, CodeChip, ErrorAlert, LoadError, PageService, Skeleton, StatusPill, ToastService, WakingCard,
+  docLabel, relativeTime, retryWhileWaking, statusLabel, versionCode,
+} from '../../shared/ui';
 
 const PRE_SUBMISSION = ['Draft', 'AwaitingDocuments', 'ReadyToSubmit'];
-const FLOW = ['Draft', 'AwaitingDocuments', 'ReadyToSubmit', 'Submitted', 'UnderReview', 'Decision'];
-const FUTURE_TEXT: Record<string, string> = {
-  AwaitingDocuments: 'Attach every required document',
-  ReadyToSubmit: 'Validate against the payer rule',
-  Submitted: 'Human approval, then submit',
-  UnderReview: 'Simulated payer picks it up',
-  Decision: 'Approved or Denied by the simulated payer',
-};
-
-interface TimelineRow {
-  title: string;
-  detail: string;
-  at?: string;
-  kind: 'done' | 'current' | 'future';
-}
+const STEPS = ['Draft', 'Awaiting documents', 'Ready to submit', 'Submitted', 'Under review', 'Decision'];
+const STEP_INDEX: Record<string, number> = { Draft: 0, AwaitingDocuments: 1, ReadyToSubmit: 2, Submitted: 3, UnderReview: 4, Approved: 6, Denied: 6 };
 
 @Component({
   selector: 'ab-authorization-detail-page',
-  imports: [ReactiveFormsModule, RouterLink, DatePipe, StatusBadge, ErrorPanel, WakingNotice],
+  imports: [ReactiveFormsModule, RouterLink, DatePipe, Icon, StatusPill, ErrorAlert, LoadError, WakingCard, Skeleton, CodeChip],
   template: `
-    <nav class="crumbs" aria-label="Breadcrumb">
-      <a routerLink="/authorizations">Request Queue</a>
-      <img src="icons/chevron-right.svg" width="12" height="12" alt="" />
-      <strong>{{ id() }}</strong>
-    </nav>
-
-    <ab-waking [attempt]="waking()" />
-    <ab-error [error]="loadError()" (retry)="load()" />
-
-    @if (detail(); as d) {
-      <header class="page-head">
-        <h1>Prior Auth Details</h1>
-        <div class="page-actions">
-          @if (d.submissionAttemptId) {
-            <a class="button-link" [routerLink]="['/submissions', d.submissionAttemptId]">View submission progress</a>
-          }
-          @if (canWrite()) {
-            <button type="button" class="secondary" [class.guide-focus]="guide.isCurrent('validate')" (click)="validate()"
-                    [disabled]="busy() || !isPreSubmission()">Validate</button>
-            <button type="button" [class.guide-focus]="guide.isCurrent('prepare')" (click)="prepare()"
-                    [disabled]="busy() || d.status !== 'ReadyToSubmit'"
-                    [title]="d.status !== 'ReadyToSubmit' ? 'Available once the request is Ready to Submit' : ''">
-              Prepare submission for review
-            </button>
-          }
-        </div>
-      </header>
-
-      <ab-error [error]="actionError()" />
-      @if (notice(); as n) {
-        <div class="panel ok" role="status"><img src="icons/check-circle-16.svg" width="16" height="16" alt="" /><p>{{ n }}</p></div>
-      }
-      @if (!canWrite()) {
-        <div class="panel info"><img src="icons/info-16.svg" width="16" height="16" alt="" /><p>Read-only access. Coordinators in your tenant can change this request.</p></div>
-      } @else if (!isPreSubmission()) {
-        <div class="panel info"><img src="icons/info-16.svg" width="16" height="16" alt="" /><p>This request has been submitted; documents and validation are locked.</p></div>
+    <div class="page">
+      <ab-waking [attempt]="waking()" />
+      <ab-load-error [error]="loadError()" [subject]="id()" (retry)="load()" />
+      @if (!detail() && !loadError()) {
+        <ab-skeleton [rows]="4" />
       }
 
-      <div class="grid-2">
-        <div class="stack">
-          <section class="card">
-            <div class="card-head">
-              <h2>Request Information</h2>
-              <ab-status [status]="d.status" />
-            </div>
-            <div class="facts">
-              <div class="fact"><span class="k">Request ID</span><span class="v mono b">{{ d.authorizationId }}</span></div>
-              <div class="fact"><span class="k">Member</span><span class="v b">{{ d.memberLabel }}</span></div>
-              <div class="fact"><span class="k">Tenant</span><span class="v mono">{{ d.tenantId }}</span></div>
-              <div class="fact"><span class="k">Payer</span><span class="v">{{ d.payerCode }} (simulated)</span></div>
-              <div class="fact"><span class="k">Service</span><span class="v mono">{{ d.serviceCode }}</span></div>
-              <div class="fact">
-                <span class="k">Rule version</span>
-                <span class="v">v{{ d.rule.ruleVersion }}@if (!d.rule.isActive) { <span class="field-error"> · inactive</span> }</span>
+      @if (detail(); as d) {
+        @if (!d.rule.isActive) {
+          <div class="alert a-warn" role="alert">
+            <ab-icon name="alert-triangle" [size]="18" />
+            <div><p class="at">Rule inactive — configuration missing</p>
+              <p class="ad">Rule v{{ d.rule.ruleVersion }} for {{ d.serviceCode }} is not active for {{ d.payerCode }}. Validation and submission are blocked until an administrator activates it.</p></div>
+          </div>
+        }
+        <ab-error [error]="actionError()" (retry)="reload()" />
+        @if (!isPreSubmission()) {
+          <div class="alert a-neutral">
+            <ab-icon name="lock" [size]="18" />
+            <div><p class="at">Submitted — documents locked</p>
+              <p class="ad">Once a request is submitted its checklist is frozen. Documents and validation can no longer change.</p></div>
+          </div>
+        }
+
+        <section class="card">
+          <div class="card-h" style="margin-bottom: 0">
+            <div style="min-width: 0">
+              <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap">
+                <h2 class="h1 mono">{{ d.authorizationId }}</h2>
+                <ab-status [status]="d.status" [large]="true" />
               </div>
+              <p class="mono body muted" style="margin-top: 8px">{{ d.payerCode }} · {{ d.serviceCode }} · Member {{ d.memberLabel }}</p>
             </div>
-            <div class="fact">
-              <span class="k">Version (sent with every change so edits never overwrite each other)</span>
-              <span class="v"><code>{{ d.version }}</code></span>
-            </div>
-          </section>
-
-          <section class="card">
-            <h2>Required Documents Checklist</h2>
-            @if (missingError(); as e) {
-              <ab-error [error]="e" />
+            <button type="button" class="btn btn-sec btn-sm" (click)="copyLink()"><ab-icon [name]="copied() ? 'check' : 'copy'" [size]="14" /><span>{{ copied() ? 'Copied' : 'Copy link' }}</span></button>
+          </div>
+          <div class="divider" style="margin: 24px 0"></div>
+          <div class="stp" aria-label="Request progress">
+            @for (s of steps; track s; let i = $index) {
+              @if (i > 0) { <div class="stp-l">@if (i <= stepIndex()) { <i></i> }</div> }
+              <div class="stp-i">
+                <span class="stp-d" [class.done]="i < stepIndex()" [class.cur]="i === stepIndex()" [class.pulse]="i === stepIndex()">
+                  @if (i < stepIndex()) { <ab-icon name="check" [size]="14" /> } @else { {{ i + 1 }} }
+                </span>
+                <span class="stp-t" [class.done]="i < stepIndex()" [class.cur]="i === stepIndex()">{{ i === 5 && decided() ? label(d.status) : s }}</span>
+              </div>
             }
-            @if (missing(); as m) {
-              <div class="stack" style="gap: 12px">
-                @for (type of m.required; track type) {
-                  <div class="doc-row">
-                    <span class="l">
-                      <img [src]="m.present.includes(type) ? 'icons/check-circle-16.svg' : m.invalid.includes(type) ? 'icons/alert-triangle-amber.svg' : 'icons/clock-16.svg'" width="16" height="16" alt="" />
-                      {{ label(type) }}
-                    </span>
-                    @if (m.present.includes(type)) {
-                      <span class="r">Attached {{ attachedAt(type) | date: 'MMM d, y' }} · <code>{{ fixtureOf(type) }}</code></span>
-                    } @else if (m.invalid.includes(type)) {
-                      <span class="r bad">Attached but invalid · <code>{{ fixtureOf(type) }}</code></span>
-                    } @else {
-                      <span class="r warn">Missing</span>
-                    }
-                  </div>
+          </div>
+        </section>
+
+        <div class="detail-grid">
+          <div>
+            <section class="card">
+              <div class="card-h">
+                <div><h2 class="card-t">Required documents</h2><p class="card-s">Checklist evaluated against rule version {{ d.rule.ruleVersion }}</p></div>
+                @if (missing(); as m) {
+                  <span class="pill" [class.p-success]="m.isComplete" [class.p-warn]="!m.isComplete">
+                    <ab-icon [name]="m.isComplete ? 'check-circle' : 'clock'" [size]="12" /><span>{{ m.present.length }} of {{ m.required.length }} valid</span>
+                  </span>
                 }
               </div>
-            }
-            @if (canEdit()) {
-              <div class="dropzone" [class.guide-focus]="guide.isCurrent('attach')">
-                <img src="icons/upload-cloud.svg" width="24" height="24" alt="" />
-                <span class="t">Attach a synthetic document</span>
-                <span class="s">Fixtures are allowlisted metadata records. Nothing is uploaded.</span>
-                <form [formGroup]="attachForm" (ngSubmit)="attach()" novalidate>
-                  <label class="field">
-                    Document type
-                    <select formControlName="documentType">
-                      <option value="" disabled>Choose…</option>
-                      @for (type of documentTypes(); track type) {
-                        <option [value]="type">{{ type }}</option>
+              @if (missingError(); as e) {
+                <ab-error [error]="e" />
+              }
+              @if (missing(); as m) {
+                <div>
+                  @for (type of m.required; track type) {
+                    <div class="doc-i">
+                      @if (m.present.includes(type)) {
+                        <ab-icon name="check-circle" [size]="20" class="icon-ok" />
+                      } @else if (m.invalid.includes(type)) {
+                        <ab-icon name="alert-triangle" [size]="20" class="icon-warn" />
+                      } @else {
+                        <ab-icon name="x-circle" [size]="20" class="icon-bad" />
                       }
-                    </select>
-                  </label>
-                  <label class="field">
-                    Fixture
-                    <select formControlName="fixtureKey">
-                      <option value="" disabled>Choose…</option>
-                      @for (f of fixturesForType(); track f.key) {
-                        <option [value]="f.key">{{ f.key }} — {{ f.isValid ? 'valid' : 'invalid' }}</option>
+                      <div style="flex: 1; min-width: 0">
+                        <p class="t">{{ doc(type) }}</p>
+                        @if (m.present.includes(type)) {
+                          <p class="s">Attached {{ ago(attachedAt(type)) }} · matched rule v{{ d.rule.ruleVersion }} · fixture <span class="mono">{{ fixtureOf(type) }}</span></p>
+                        } @else if (m.invalid.includes(type)) {
+                          <p class="s">Fixture is invalid · replace it to clear · fixture <span class="mono">{{ fixtureOf(type) }}</span></p>
+                        } @else {
+                          <p class="s">Required by rule v{{ d.rule.ruleVersion }} · not attached · fixture –</p>
+                        }
+                      </div>
+                      @if (m.present.includes(type)) {
+                        <span class="pill p-success"><ab-icon name="check-circle" [size]="12" /><span>Valid</span></span>
+                      } @else if (m.invalid.includes(type)) {
+                        <span class="pill p-warn"><ab-icon name="alert-triangle" [size]="12" /><span>Attached but invalid</span></span>
+                      } @else {
+                        <span class="pill p-danger"><ab-icon name="x-circle" [size]="12" /><span>Missing</span></span>
                       }
-                    </select>
-                  </label>
-                  <button type="submit" [disabled]="attachForm.invalid || busy()">Attach fixture</button>
-                </form>
-              </div>
-            }
-          </section>
-
-          <section class="card">
-            <div class="card-head">
-              <div>
-                <h2>AI Assistant — MCP Tools</h2>
-                <p class="sub">What an AI host connected to AuthBridge can do with this request</p>
-              </div>
-            </div>
-            <div class="ai-box">
-              <span class="t"><img src="icons/sparkles.svg" width="16" height="16" alt="" />Try asking your assistant</span>
-              <ul>
-                <li>"What's missing on {{ d.authorizationId }}?" <code>get_missing_documents</code></li>
-                <li>"Validate {{ d.authorizationId }}." <code>validate_authorization_request</code></li>
-                <li>"Prepare {{ d.authorizationId }} for submission." <code>prepare_authorization_submission</code></li>
-                <li>"Has it been decided?" <code>get_submission_status</code></li>
-              </ul>
-              <p>The assistant can prepare a submission and send you the review link, but it can never approve. Approval is your click.</p>
-            </div>
-          </section>
-        </div>
-
-        <div class="stack">
-          <section class="card">
-            <h2>Prior Auth Timeline</h2>
-            <div class="timeline">
-              @for (t of timeline(); track $index) {
-                <div class="tl">
-                  <img [src]="'icons/dot-' + t.kind + '.svg'" width="16" height="16" alt="" />
-                  <div>
-                    <div class="h" [class.current]="t.kind === 'current'" [class.future]="t.kind === 'future'">{{ t.title }}</div>
-                    <div class="d">{{ t.detail }}@if (t.at) { · <time>{{ t.at | date: 'MMM d, h:mm a' }}</time> }</div>
-                  </div>
+                    </div>
+                  }
                 </div>
               }
-            </div>
-          </section>
+              <p class="cap" style="display: flex; align-items: center; gap: 6px; margin-top: 16px"><ab-icon name="info" [size]="14" />Fixtures are synthetic metadata, not uploaded files.</p>
+            </section>
 
-          <section class="card">
-            <h2>Payer Requirements Checklist</h2>
-            <div class="checks">
-              <div><img [src]="d.rule.isActive ? 'icons/check-green.svg' : 'icons/info-16.svg'" width="16" height="16" alt="" />
-                Rule {{ d.payerCode }} / {{ d.serviceCode }} v{{ d.rule.ruleVersion }} {{ d.rule.isActive ? 'is active' : 'is inactive — configuration missing' }}</div>
-              @if (missing(); as m) {
-                @for (type of m.required; track type) {
-                  <div><img [src]="m.present.includes(type) ? 'icons/check-green.svg' : 'icons/info-16.svg'" width="16" height="16" alt="" />
-                    {{ label(type) }} {{ m.present.includes(type) ? 'provided and valid' : 'still required' }}</div>
+            @if (canEdit()) {
+              <section class="card" [class.guide-focus]="guide.isCurrent('attach')">
+                <div class="card-h"><div><h2 class="card-t">Attach document</h2><p class="card-s">Pick a synthetic fixture to stand in for a file</p></div></div>
+                <form class="attach-form" [formGroup]="attachForm" (ngSubmit)="attach()" novalidate>
+                  <div class="field">
+                    <label class="lbl" for="doc-type">Document type</label>
+                    <span class="sel">
+                      <select class="inp" id="doc-type" formControlName="documentType">
+                        <option value="" disabled>Choose…</option>
+                        @for (type of documentTypes(); track type) { <option [value]="type">{{ doc(type) }}</option> }
+                      </select>
+                      <ab-icon name="chevron-down" />
+                    </span>
+                  </div>
+                  <div class="field">
+                    <label class="lbl" for="doc-fixture">Fixture</label>
+                    <span class="sel">
+                      <select class="inp" id="doc-fixture" formControlName="fixtureKey">
+                        <option value="" disabled>Choose…</option>
+                        @for (f of fixturesForType(); track f.key) { <option [value]="f.key">{{ f.key }} — {{ f.isValid ? 'valid' : 'invalid' }}</option> }
+                      </select>
+                      <ab-icon name="chevron-down" />
+                    </span>
+                  </div>
+                  <button type="submit" class="btn btn-pri" [disabled]="attachForm.invalid || busy()">
+                    @if (busy() && pending() === 'attach') { <span class="spin"></span> } @else { <ab-icon name="paperclip" /> }<span>Attach</span>
+                  </button>
+                </form>
+                <p class="hint" style="margin-top: 12px">The attached row appears in the checklist above once the fixture is accepted.</p>
+              </section>
+            }
+
+            <section class="card">
+              <div class="card-h"><div><h2 class="card-t">Timeline</h2><p class="card-s">Every status change on this request</p></div></div>
+              <div class="tl">
+                @for (h of timeline(); track h.id) {
+                  <div class="tl-i" [class.past]="!$first">
+                    <div class="tl-card">
+                      <div class="tl-trans">
+                        @if (h.previousStatus) { <ab-status [status]="h.previousStatus" /><ab-icon name="arrow-right" [size]="14" /> }
+                        <ab-status [status]="h.newStatus" />
+                      </div>
+                      <div class="tl-meta"><span>{{ actor(h.actorId) }}</span><span class="mono">{{ h.occurredAtUtc | date: 'yyyy-MM-dd HH:mm' }}</span></div>
+                      <p class="body" style="margin-top: 8px; color: var(--text)">{{ h.reason }}</p>
+                    </div>
+                  </div>
+                }
+              </div>
+            </section>
+          </div>
+
+          <div class="sticky-col">
+            <section class="card">
+              <div class="card-h"><div><h2 class="card-t">Details</h2><p class="card-s">Synthetic record</p></div></div>
+              <div>
+                <div class="dl-row"><span class="k">Member</span><span class="v"><span class="mono">{{ d.memberLabel }}</span><span class="cap">(synthetic)</span></span></div>
+                <div class="dl-row"><span class="k">Payer</span><span class="v"><span class="mono">{{ d.payerCode }}</span><span class="cap">(simulated)</span></span></div>
+                <div class="dl-row"><span class="k">Service</span><span class="v mono">{{ d.serviceCode }}</span></div>
+                <div class="dl-row"><span class="k">Tenant</span><span class="v"><span class="tenant">{{ d.tenantId }}</span></span></div>
+                <div class="dl-row"><span class="k">Rule version</span><span class="v">v{{ d.rule.ruleVersion }}
+                  @if (!d.rule.isActive) { <span class="pill p-warn"><ab-icon name="alert-circle" [size]="12" /><span>inactive</span></span> }</span></div>
+                <div class="dl-row"><span class="k">Version code</span><span class="v"><ab-code [value]="code()" /></span></div>
+                <div class="dl-row"><span class="k">Updated</span><span class="v">{{ d.updatedAtUtc | date: 'd MMM y, HH:mm' }} <span class="cap">({{ ago(d.updatedAtUtc) }})</span></span></div>
+              </div>
+            </section>
+
+            <section class="card desktop-actions">
+              <div class="card-h"><div><h2 class="card-t">Actions</h2><p class="card-s">{{ roleLine() }}</p></div></div>
+              @if (canWrite()) {
+                <div style="display: flex; flex-direction: column; gap: 12px">
+                  <button type="button" class="btn btn-sec btn-block" [class.guide-focus]="guide.isCurrent('validate')" (click)="validate()"
+                          [disabled]="busy() || !isPreSubmission() || !d.rule.isActive">
+                    @if (busy() && pending() === 'validate') { <span class="spin"></span> } @else { <ab-icon name="shield-check" /> }<span>Validate</span>
+                  </button>
+                  <span class="tip" style="display: block">
+                    <button type="button" class="btn btn-pri btn-block" [class.guide-focus]="guide.isCurrent('prepare')" (click)="prepare()"
+                            [disabled]="busy() || d.status !== 'ReadyToSubmit'" [attr.aria-describedby]="d.status !== 'ReadyToSubmit' ? 'prep-tip' : null"
+                            (mouseenter)="tip.set(true)" (mouseleave)="tip.set(false)" (focus)="tip.set(true)" (blur)="tip.set(false)">
+                      @if (busy() && pending() === 'prepare') { <span class="spin"></span> } @else { <ab-icon name="zap" /> }<span>Prepare submission for review</span>
+                    </button>
+                    @if (d.status !== 'ReadyToSubmit' && isPreSubmission()) {
+                      <span id="prep-tip" class="tipbox" [style.display]="tip() ? 'block' : 'none'" role="tooltip">Available once the request is Ready to submit</span>
+                    }
+                  </span>
+                  @if (d.submissionAttemptId) {
+                    <a class="btn btn-sec btn-block" [routerLink]="['/submissions', d.submissionAttemptId]"><ab-icon name="send" /><span>View submission progress</span></a>
+                  }
+                </div>
+                <p class="cap" style="display: flex; gap: 8px; margin-top: 16px"><ab-icon name="lock" [size]="14" />Preparing only creates a review. A human still has to approve before anything is sent.</p>
+              } @else {
+                <p class="body muted">You have read-only access. Coordinators in your tenant can attach, validate and prepare.</p>
+                @if (d.submissionAttemptId) {
+                  <a class="btn btn-sec btn-block" style="margin-top: 12px" [routerLink]="['/submissions', d.submissionAttemptId]"><ab-icon name="send" /><span>View submission progress</span></a>
                 }
               }
-              <div><img src="icons/check-green.svg" width="16" height="16" alt="" />Access verified for {{ d.tenantId }}</div>
-            </div>
-          </section>
+            </section>
+          </div>
         </div>
-      </div>
-    }
+
+        @if (canWrite()) {
+          <div class="mobile-bar">
+            <button type="button" class="btn btn-sec btn-icon" aria-label="Validate" (click)="validate()" [disabled]="busy() || !isPreSubmission() || !d.rule.isActive"><ab-icon name="shield-check" [size]="18" /></button>
+            @if (d.submissionAttemptId) {
+              <a class="btn btn-pri" [routerLink]="['/submissions', d.submissionAttemptId]">View submission</a>
+            } @else {
+              <button type="button" class="btn btn-pri" (click)="prepare()" [disabled]="busy() || d.status !== 'ReadyToSubmit'">Prepare for review</button>
+            }
+          </div>
+        }
+      }
+    </div>
   `,
 })
 export class AuthorizationDetailPage implements OnInit {
@@ -208,6 +239,8 @@ export class AuthorizationDetailPage implements OnInit {
   private readonly api = inject(ApiService);
   private readonly router = inject(Router);
   private readonly callers = inject(CallerService);
+  private readonly toasts = inject(ToastService);
+  private readonly pageHeader = inject(PageService);
   protected readonly guide = inject(GuideService);
 
   protected readonly detail = signal<AuthorizationStatusDetail | null>(null);
@@ -217,13 +250,31 @@ export class AuthorizationDetailPage implements OnInit {
   protected readonly fixtures = signal<DocumentFixture[]>([]);
   protected readonly loadError = signal<UiError | null>(null);
   protected readonly actionError = signal<UiError | null>(null);
-  protected readonly notice = signal<string | null>(null);
   protected readonly busy = signal(false);
+  protected readonly pending = signal<'attach' | 'validate' | 'prepare' | null>(null);
   protected readonly waking = signal(0);
+  protected readonly copied = signal(false);
+  protected readonly tip = signal(false);
+
+  protected readonly steps = STEPS;
+  protected readonly label = statusLabel;
+  protected readonly doc = docLabel;
+  protected readonly ago = (iso: string | null) => relativeTime(iso);
 
   protected readonly canWrite = this.callers.canWrite;
   protected readonly isPreSubmission = computed(() => PRE_SUBMISSION.includes(this.detail()?.status ?? ''));
   protected readonly canEdit = computed(() => this.canWrite() && this.isPreSubmission());
+  protected readonly stepIndex = computed(() => STEP_INDEX[this.detail()?.status ?? 'Draft'] ?? 0);
+  protected readonly decided = computed(() => ['Approved', 'Denied'].includes(this.detail()?.status ?? ''));
+  protected readonly timeline = computed(() => [...this.history()].reverse());
+  protected readonly code = computed(() => {
+    const d = this.detail();
+    return d ? versionCode(d.authorizationId, d.rule.ruleVersion, d.version) : '';
+  });
+  protected readonly roleLine = computed(() => {
+    const c = this.callers.caller();
+    return c ? `${c.role} · ${c.tenantId}` : '';
+  });
 
   protected readonly attachForm = inject(FormBuilder).nonNullable.group({
     documentType: ['', Validators.required],
@@ -233,35 +284,23 @@ export class AuthorizationDetailPage implements OnInit {
   protected readonly documentTypes = computed(() => [...new Set(this.fixtures().map((f) => f.documentType))]);
   protected readonly fixturesForType = computed(() => this.fixtures().filter((f) => f.documentType === this.selectedType()));
 
-  /** Recorded history, the current step highlighted, then the steps still to come. */
-  protected readonly timeline = computed<TimelineRow[]>(() => {
-    const entries = this.history();
-    const rows: TimelineRow[] = entries.map((h, i) => ({
-      title: this.label(h.newStatus),
-      detail: `${h.reason} · ${h.actorId.startsWith('system:') ? h.actorId.slice(7) : 'coordinator'}`,
-      at: h.occurredAtUtc,
-      kind: i === entries.length - 1 ? 'current' : 'done',
-    }));
-    const status = this.detail()?.status ?? '';
-    if (status === 'Approved' || status === 'Denied') {
-      if (rows.length) rows[rows.length - 1].kind = 'done';
-      return rows;
-    }
-    const index = FLOW.indexOf(status);
-    for (const step of FLOW.slice(index + 1)) {
-      rows.push({ title: this.label(step), detail: FUTURE_TEXT[step] ?? '', kind: 'future' });
-    }
-    return rows;
-  });
-
   constructor() {
     this.attachForm.controls.documentType.valueChanges.subscribe(() =>
       this.attachForm.controls.fixtureKey.setValue('', { emitEvent: false }),
     );
+    // The same instance is reused when global search jumps from one request to another.
+    effect(() => {
+      const id = this.id();
+      untracked(() => {
+        this.pageHeader.set(id, [{ label: 'Workspace' }, { label: 'Requests', link: '/authorizations' }, { label: id }], true);
+        this.detail.set(null);
+        this.actionError.set(null);
+        this.load();
+      });
+    });
   }
 
   ngOnInit(): void {
-    this.load();
     this.api.fixtures().subscribe({ next: (f) => this.fixtures.set(f), error: () => this.fixtures.set([]) });
   }
 
@@ -283,7 +322,7 @@ export class AuthorizationDetailPage implements OnInit {
           this.guide.complete('open');
           this.history.set(history);
           this.missing.set(missing.ok);
-          this.missingError.set(missing.error);
+          this.missingError.set(missing.ok || !detail.rule.isActive ? null : missing.error);
         },
         error: (e: unknown) => {
           this.waking.set(0);
@@ -292,8 +331,17 @@ export class AuthorizationDetailPage implements OnInit {
       });
   }
 
-  protected label(value: string): string {
-    return value.replace(/([a-z])([A-Z])/g, '$1 $2');
+  protected reload(): void {
+    this.actionError.set(null);
+    this.load();
+  }
+
+  protected actor(actorId: string): string {
+    const me = this.callers.caller();
+    if (me && actorId === me.actorId) return `${me.displayLabel} · ${me.tenantId}`;
+    if (actorId === 'system:payer-simulator') return 'Simulated payer';
+    if (actorId === 'system:seed') return 'Seed data';
+    return `Coordinator · ${this.detail()?.tenantId ?? ''}`;
   }
 
   protected fixtureOf(type: string): string {
@@ -304,25 +352,37 @@ export class AuthorizationDetailPage implements OnInit {
     return this.detail()?.documents.find((d) => d.documentType === type)?.createdAtUtc ?? null;
   }
 
+  protected async copyLink(): Promise<void> {
+    try {
+      await navigator.clipboard.writeText(location.href);
+      this.copied.set(true);
+      setTimeout(() => this.copied.set(false), 1500);
+    } catch {
+      // Clipboard unavailable; the URL is still in the address bar.
+    }
+  }
+
   protected attach(): void {
     const d = this.detail();
     if (!d || this.attachForm.invalid) return;
     const { documentType, fixtureKey } = this.attachForm.getRawValue();
-    this.act(this.api.attachFixture(d.authorizationId, documentType, fixtureKey, d.version), (r) => {
+    this.act('attach', this.api.attachFixture(d.authorizationId, documentType, fixtureKey, d.version), (r) => {
       this.attachForm.reset();
       this.guide.complete('attach');
-      return `${r.replaced ? 'Replaced' : 'Attached'} ${r.documentType} (${r.isValid ? 'valid' : 'invalid'}). Status: ${this.label(r.status)}.`;
+      this.toasts.show(`${r.replaced ? 'Replaced' : 'Attached'} ${docLabel(r.documentType).toLowerCase()}`,
+        `${r.fixtureKey} is ${r.isValid ? 'valid' : 'invalid'}. Status: ${statusLabel(r.status)}.`, r.isValid ? 'success' : 'danger');
     });
   }
 
   protected validate(): void {
     const d = this.detail();
     if (!d) return;
-    this.act(this.api.validate(d.authorizationId, d.version), (r) => {
+    this.act('validate', this.api.validate(d.authorizationId, d.version), (r) => {
       if (r.status === 'ReadyToSubmit') this.guide.complete('validate');
-      return r.statusChanged
-        ? `Validated: ${this.label(r.previousStatus)} → ${this.label(r.status)}.`
-        : `Validated: still ${this.label(r.status)}${r.completeness.isComplete ? '' : ` (missing ${[...r.completeness.missing, ...r.completeness.invalid].join(', ')})`}.`;
+      this.toasts.show(r.statusChanged ? 'Validated' : 'Validated — no change',
+        r.statusChanged ? `${statusLabel(r.previousStatus)} → ${statusLabel(r.status)}.`
+          : `Still ${statusLabel(r.status).toLowerCase()}${r.completeness.isComplete ? '' : ` — missing ${[...r.completeness.missing, ...r.completeness.invalid].map(docLabel).join(', ').toLowerCase()}`}.`,
+        r.completeness.isComplete ? 'success' : 'info');
     });
   }
 
@@ -330,6 +390,7 @@ export class AuthorizationDetailPage implements OnInit {
     const d = this.detail();
     if (!d) return;
     this.busy.set(true);
+    this.pending.set('prepare');
     this.actionError.set(null);
     this.api.prepare(d.authorizationId, d.version).subscribe({
       next: (proposal) => {
@@ -338,26 +399,27 @@ export class AuthorizationDetailPage implements OnInit {
       },
       error: (e: unknown) => {
         this.busy.set(false);
+        this.pending.set(null);
         this.actionError.set(toUiError(e));
       },
     });
   }
 
-  private act<T>(request: Observable<T>, describe: (result: T) => string): void {
+  private act<T>(kind: 'attach' | 'validate', request: Observable<T>, done: (result: T) => void): void {
     this.busy.set(true);
+    this.pending.set(kind);
     this.actionError.set(null);
-    this.notice.set(null);
     request.subscribe({
       next: (result) => {
         this.busy.set(false);
-        this.notice.set(describe(result));
+        this.pending.set(null);
+        done(result);
         this.load();
       },
       error: (e: unknown) => {
         this.busy.set(false);
+        this.pending.set(null);
         this.actionError.set(toUiError(e));
-        // A version conflict means someone else changed it: show the current state.
-        this.load();
       },
     });
   }

@@ -46,6 +46,8 @@ export interface AuthorizationSummary {
   memberLabel: string;
   version: string;
   updatedAtUtc: string;
+  requiredDocumentCount: number;
+  validDocumentCount: number;
 }
 
 export interface RuleReference {

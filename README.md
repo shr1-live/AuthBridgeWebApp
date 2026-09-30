@@ -35,22 +35,32 @@ users. That sign-in exists only while the backend runs in Development.
 The build fails if the key is a secret or service-role key. On Vercel (`VERCEL=1`) it also fails
 if any value is missing or not https.
 
+## Design
+
+The UI implements the design bundle in the sibling `authbridge-design` folder. `src/tokens.css` is a verbatim
+copy of the bundle's `styles/tokens.css` (the single source of truth for colours, type, spacing,
+components and motion); `src/styles.css` adds only the app shell and responsive layout. Light and
+dark themes (toggle in the top bar, remembered per browser), 1440 / 768 / 375 layouts, and
+`prefers-reduced-motion` are supported.
+
 ## Pages
 
 | Route | Purpose |
 | --- | --- |
-| `/login` | Supabase email/password sign-in, or the Development user picker |
-| `/authorizations` | Tenant-scoped list with a status, payer, service and ID filter, and pagination |
-| `/authorizations/:id` | Details, required-document checklist, fixture attachment, Validate, Prepare, timeline |
-| `/proposals/:id` | Human review: confirmation tick, then Approve; then Submit, with a stable idempotency key |
-| `/submissions/:id` | Polls the persisted attempt and shows the decision only once recorded |
+| `/login` | Split brand panel; Supabase sign-in, or the Development user grid (deactivated users cannot be picked) |
+| `/authorizations` | Requests: four KPI cards (click to filter), filter card with removable chips, table or card view, document progress, pagination |
+| `/submissions` | Requests already sent to the simulated payer |
+| `/activity` | Recent status changes across the tenant |
+| `/authorizations/:id` | Alerts, hero with 6-step stepper, required-documents checklist, attach fixture, timeline, details and actions |
+| `/proposals/:id` | Review and approve: countdown ring, what you are approving, one confirmation tick, Approve; then a separate Submit |
+| `/submissions/:id` | Vertical tracker, decision card with payer reference, retry state |
 
-Route guards only affect what the user sees. The backend enforces every permission, and
-buttons are hidden for viewers only as a convenience.
+Route guards only affect what the user sees. The backend enforces every permission; viewers see a
+"Read-only access" pill and no action buttons.
 
-The UI has explicit states for loading, the backend waking up (retried automatically), access
-denied, not found, version conflict, expired proposal and a signed-out session (refreshed once
-on 401, then sent to sign-in).
+States: skeleton loading, empty results, backend waking up (retried automatically), request not
+found, access denied, access not provisioned, session expired, unexpected error with correlation ID,
+changed-since-loaded conflict with Reload, expired and stale reviews.
 
 ## Deploying
 

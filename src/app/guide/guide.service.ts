@@ -41,7 +41,7 @@ export const GUIDE_STEPS: GuideStep[] = [
   {
     id: 'browse',
     title: 'See your requests',
-    doing: 'The Dashboard and Request Queue show prior-authorization requests for your tenant only. Try the Status filter on the queue.',
+    doing: 'Requests shows your tenant only. Click a KPI card or pick a Status to filter; results update instantly.',
     behind: 'Tenant B has 8 more requests that you cannot see. They are excluded on the server, not hidden in the page.',
     api: 'GET /api/v1/authorizations',
     link: '/authorizations',
@@ -58,7 +58,7 @@ export const GUIDE_STEPS: GuideStep[] = [
   {
     id: 'attach',
     title: 'Attach the missing referral',
-    doing: 'In "Required Documents Checklist", choose ReferralLetter, then FX-REFERRAL-SIGNED, then click "Attach fixture".',
+    doing: 'In "Attach document", choose Referral letter, then FX-REFERRAL-SIGNED, then click "Attach".',
     behind:
       'A fixture is a synthetic document record, not a real file. Attaching one gives the request a new version, which invalidates any proposal prepared against the old one.',
     api: 'POST /authorizations/{id}/documents',
@@ -84,7 +84,7 @@ export const GUIDE_STEPS: GuideStep[] = [
   {
     id: 'approve',
     title: 'Approve (humans only)',
-    doing: 'Read the summary, tick all three assurances, then click "Approve Submission".',
+    doing: 'Read "What you are approving", tick the confirmation, then click "Approve".',
     behind:
       'This is the safety boundary. No MCP tool can approve, so a person must click here. Only the coordinator who prepared the proposal can approve it.',
     api: 'POST /submission-proposals/{id}/approve',
@@ -93,7 +93,7 @@ export const GUIDE_STEPS: GuideStep[] = [
   {
     id: 'submit',
     title: 'Submit to the simulated payer',
-    doing: 'Click "Submit Authorization Request".',
+    doing: 'Click "Submit to simulated payer".',
     behind:
       'In one database transaction the server creates the attempt, marks the request Submitted and uses up the proposal. An idempotency key makes a retry return the same attempt instead of creating a duplicate.',
     api: 'POST /api/v1/submissions',

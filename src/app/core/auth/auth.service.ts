@@ -107,10 +107,12 @@ export class AuthService {
   }
 
   async signOut(reason?: 'expired'): Promise<void> {
+    // Leave the current page first: clearing the session while it is still mounted would
+    // re-render it once without a token and fire unauthenticated requests.
+    await this.router.navigate(['/login'], { queryParams: reason ? { reason } : {} });
     if (this.supabase) await this.supabase.auth.signOut();
     sessionStorage.removeItem(LOCAL_DEV_KEY);
     this.identity.set(null);
-    await this.router.navigate(['/login'], { queryParams: reason ? { reason } : {} });
   }
 
   private readLocal(): LocalDevSession | null {
