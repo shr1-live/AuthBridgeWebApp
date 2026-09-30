@@ -1,12 +1,39 @@
-import { Component, signal } from '@angular/core';
-import { RouterOutlet } from '@angular/router';
+import { Component, effect, inject } from '@angular/core';
+import { RouterLink, RouterOutlet } from '@angular/router';
+import { AuthService } from './core/auth/auth.service';
+import { CallerService } from './shared/ui';
 
 @Component({
-  imports: [RouterOutlet],
   selector: 'app-root',
-  styleUrl: './app.css',
-  templateUrl: './app.html',
+  imports: [RouterOutlet, RouterLink],
+  template: `
+    <div class="banner" role="note">Synthetic healthcare demo — simulated payer responses.</div>
+    <header class="topbar">
+      <a routerLink="/authorizations" class="brand">AuthBridge</a>
+      @if (auth.signedIn()) {
+        <span class="who">
+          @if (callers.caller(); as c) {
+            {{ c.displayLabel || auth.label() }} · {{ c.tenantId }} · {{ c.role }}
+          } @else {
+            {{ auth.label() }}
+          }
+        </span>
+        <button type="button" class="secondary" (click)="auth.signOut()">Sign out</button>
+      }
+    </header>
+    <main>
+      <router-outlet />
+    </main>
+  `,
 })
 export class App {
-  protected readonly title = signal('authbridge-ui');
+  protected readonly auth = inject(AuthService);
+  protected readonly callers = inject(CallerService);
+
+  constructor() {
+    effect(() => {
+      if (this.auth.signedIn()) this.callers.load().subscribe();
+      else this.callers.clear();
+    });
+  }
 }
