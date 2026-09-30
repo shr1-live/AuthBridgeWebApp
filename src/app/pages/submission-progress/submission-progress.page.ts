@@ -4,6 +4,7 @@ import { RouterLink } from '@angular/router';
 import { ApiService } from '../../core/api/api.service';
 import { UiError, toUiError } from '../../core/api/api-error';
 import { Submission } from '../../core/api/models';
+import { GuideService } from '../../guide/guide.service';
 import { ErrorPanel, StatusBadge, WakingNotice, retryWhileWaking } from '../../shared/ui';
 
 const POLL_MS = 4_000;
@@ -58,6 +59,7 @@ export class SubmissionProgressPage implements OnInit {
   readonly id = input.required<string>();
 
   private readonly api = inject(ApiService);
+  private readonly guide = inject(GuideService);
   protected readonly submission = signal<Submission | null>(null);
   protected readonly error = signal<UiError | null>(null);
   protected readonly waking = signal(0);
@@ -89,6 +91,7 @@ export class SubmissionProgressPage implements OnInit {
       .subscribe({
         next: (s) => {
           this.submission.set(s);
+          if (this.decided()) this.guide.complete('decision');
           if (!this.decided() && Date.now() - this.started < MAX_POLL_MS) this.timer = setTimeout(() => this.poll(), POLL_MS);
         },
         error: (e: unknown) => {

@@ -7,6 +7,7 @@ import { forkJoin, of, catchError, map } from 'rxjs';
 import { ApiService } from '../../core/api/api.service';
 import { UiError, toUiError } from '../../core/api/api-error';
 import { AuthorizationStatusDetail, DocumentFixture, HistoryEntry, MissingDocuments } from '../../core/api/models';
+import { GuideService } from '../../guide/guide.service';
 import { CallerService, ErrorPanel, StatusBadge, WakingNotice, retryWhileWaking } from '../../shared/ui';
 
 const PRE_SUBMISSION = ['Draft', 'AwaitingDocuments', 'ReadyToSubmit'];
@@ -76,7 +77,7 @@ const PRE_SUBMISSION = ['Draft', 'AwaitingDocuments', 'ReadyToSubmit'];
         <p class="muted">Fixtures are allowlisted synthetic metadata records, not uploaded files.</p>
 
         @if (canEdit()) {
-          <form class="inline-form" [formGroup]="attachForm" (ngSubmit)="attach()" novalidate>
+          <form class="inline-form" [class.guide-focus]="guide.isCurrent('attach')" [formGroup]="attachForm" (ngSubmit)="attach()" novalidate>
             <label>
               Document type
               <select formControlName="documentType">
@@ -108,8 +109,8 @@ const PRE_SUBMISSION = ['Draft', 'AwaitingDocuments', 'ReadyToSubmit'];
             <div class="panel info" role="status">{{ n }}</div>
           }
           <div class="actions">
-            <button type="button" (click)="validate()" [disabled]="busy() || !isPreSubmission()">Validate</button>
-            <button type="button" (click)="prepare()" [disabled]="busy() || d.status !== 'ReadyToSubmit'">
+            <button type="button" [class.guide-focus]="guide.isCurrent('validate')" (click)="validate()" [disabled]="busy() || !isPreSubmission()">Validate</button>
+            <button type="button" [class.guide-focus]="guide.isCurrent('prepare')" (click)="prepare()" [disabled]="busy() || d.status !== 'ReadyToSubmit'">
               Prepare submission for review
             </button>
           </div>
@@ -145,6 +146,7 @@ export class AuthorizationDetailPage implements OnInit {
   private readonly api = inject(ApiService);
   private readonly router = inject(Router);
   private readonly callers = inject(CallerService);
+  protected readonly guide = inject(GuideService);
 
   protected readonly detail = signal<AuthorizationStatusDetail | null>(null);
   protected readonly missing = signal<MissingDocuments | null>(null);
@@ -195,6 +197,7 @@ export class AuthorizationDetailPage implements OnInit {
       .subscribe({
         next: ({ detail, history, missing }) => {
           this.detail.set(detail);
+          this.guide.complete('open');
           this.history.set(history);
           this.missing.set(missing.ok);
           this.missingError.set(missing.error);
@@ -212,6 +215,7 @@ export class AuthorizationDetailPage implements OnInit {
     const { documentType, fixtureKey } = this.attachForm.getRawValue();
     this.act(this.api.attachFixture(d.authorizationId, documentType, fixtureKey, d.version), (r) => {
       this.attachForm.reset();
+      this.guide.complete('attach');
       return `${r.replaced ? 'Replaced' : 'Attached'} ${r.documentType} (${r.isValid ? 'valid' : 'invalid'}). Status: ${r.status}.`;
     });
   }
@@ -219,11 +223,12 @@ export class AuthorizationDetailPage implements OnInit {
   protected validate(): void {
     const d = this.detail();
     if (!d) return;
-    this.act(this.api.validate(d.authorizationId, d.version), (r) =>
-      r.statusChanged
+    this.act(this.api.validate(d.authorizationId, d.version), (r) => {
+      if (r.status === 'ReadyToSubmit') this.guide.complete('validate');
+      return r.statusChanged
         ? `Validated: ${r.previousStatus} → ${r.status}.`
-        : `Validated: still ${r.status}${r.completeness.isComplete ? '' : ` (missing ${[...r.completeness.missing, ...r.completeness.invalid].join(', ')})`}.`,
-    );
+        : `Validated: still ${r.status}${r.completeness.isComplete ? '' : ` (missing ${[...r.completeness.missing, ...r.completeness.invalid].join(', ')})`}.`;
+    });
   }
 
   protected prepare(): void {
@@ -232,7 +237,10 @@ export class AuthorizationDetailPage implements OnInit {
     this.busy.set(true);
     this.actionError.set(null);
     this.api.prepare(d.authorizationId, d.version).subscribe({
-      next: (proposal) => void this.router.navigate(['/proposals', proposal.proposalId]),
+      next: (proposal) => {
+        this.guide.complete('prepare');
+        void this.router.navigate(['/proposals', proposal.proposalId]);
+      },
       error: (e: unknown) => {
         this.busy.set(false);
         this.actionError.set(toUiError(e));

@@ -5,6 +5,7 @@ import { RouterLink } from '@angular/router';
 import { ApiService } from '../../core/api/api.service';
 import { UiError, toUiError } from '../../core/api/api-error';
 import { AUTHORIZATION_STATUSES, AuthorizationSummary } from '../../core/api/models';
+import { GuideService } from '../../guide/guide.service';
 import { ErrorPanel, StatusBadge, WakingNotice, retryWhileWaking } from '../../shared/ui';
 
 const CODE = Validators.pattern(/^[A-Za-z0-9][A-Za-z0-9-]*$/);
@@ -93,6 +94,7 @@ const CODE = Validators.pattern(/^[A-Za-z0-9][A-Za-z0-9-]*$/);
 })
 export class AuthorizationListPage implements OnInit {
   private readonly api = inject(ApiService);
+  private readonly guide = inject(GuideService);
   protected readonly statuses = AUTHORIZATION_STATUSES;
   protected readonly pageSize = 10;
 
@@ -143,6 +145,7 @@ export class AuthorizationListPage implements OnInit {
           this.total.set(result.total);
           this.pages.set(Math.max(1, Math.ceil(result.total / result.pageSize)));
           this.loading.set(false);
+          this.guide.complete('browse');
         },
         error: (e: unknown) => {
           this.error.set(toUiError(e));

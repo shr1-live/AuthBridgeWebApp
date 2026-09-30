@@ -5,6 +5,7 @@ import { Router, RouterLink } from '@angular/router';
 import { ApiService } from '../../core/api/api.service';
 import { UiError, toUiError } from '../../core/api/api-error';
 import { Proposal } from '../../core/api/models';
+import { GuideService } from '../../guide/guide.service';
 import { CallerService, ErrorPanel, StatusBadge, WakingNotice, retryWhileWaking } from '../../shared/ui';
 
 /** Idempotency keys survive a reload of this tab so a retried submit replays, not duplicates. */
@@ -61,7 +62,7 @@ function idempotencyKeyFor(proposalId: string): string {
           @if (!canWrite() || !p.isOwnedByCaller) {
             <div class="panel info">Only the coordinator who prepared this proposal can approve it.</div>
           } @else {
-            <form class="card" [formGroup]="confirm" (ngSubmit)="approve()">
+            <form class="card" [class.guide-focus]="guide.isCurrent('approve')" [formGroup]="confirm" (ngSubmit)="approve()">
               <label class="checkbox">
                 <input type="checkbox" formControlName="reviewed" />
                 I have reviewed this request, payer, simulated action and expiry.
@@ -74,7 +75,7 @@ function idempotencyKeyFor(proposalId: string): string {
           <section class="card">
             <p>Approved at {{ p.approvedAtUtc | date: 'mediumTime' }}. It can now be submitted from here or by the AI host.</p>
             @if (canWrite() && p.isOwnedByCaller) {
-              <button type="button" (click)="submit()" [disabled]="busy()">Submit to simulated payer</button>
+              <button type="button" [class.guide-focus]="guide.isCurrent('submit')" (click)="submit()" [disabled]="busy()">Submit to simulated payer</button>
             }
           </section>
         }
@@ -98,6 +99,7 @@ export class ProposalReviewPage implements OnInit {
 
   private readonly api = inject(ApiService);
   private readonly router = inject(Router);
+  protected readonly guide = inject(GuideService);
   protected readonly canWrite = inject(CallerService).canWrite;
 
   protected readonly proposal = signal<Proposal | null>(null);
@@ -155,6 +157,7 @@ export class ProposalReviewPage implements OnInit {
       next: (p) => {
         this.busy.set(false);
         this.proposal.set(p);
+        this.guide.complete('approve');
       },
       error: (e: unknown) => {
         this.busy.set(false);
@@ -168,7 +171,10 @@ export class ProposalReviewPage implements OnInit {
     this.busy.set(true);
     this.actionError.set(null);
     this.api.submit(this.id(), idempotencyKeyFor(this.id())).subscribe({
-      next: (s) => void this.router.navigate(['/submissions', s.attemptId]),
+      next: (s) => {
+        this.guide.complete('submit');
+        void this.router.navigate(['/submissions', s.attemptId]);
+      },
       error: (e: unknown) => {
         this.busy.set(false);
         this.actionError.set(toUiError(e));
