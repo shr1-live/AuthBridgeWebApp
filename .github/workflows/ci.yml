@@ -1,0 +1,38 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Unit tests
+        run: npm test
+      - name: Local build (LocalDev sign-in, no Supabase values)
+        run: npm run build
+      - name: Production-shaped build (placeholder public values, as on Vercel)
+        env:
+          NG_APP_REQUIRE_CONFIG: "1"
+          NG_APP_API_BASE_URL: https://authbridge-api.example.onrender.com
+          NG_APP_SUPABASE_URL: https://placeholder-ref.supabase.co
+          NG_APP_SUPABASE_PUBLISHABLE_KEY: sb_publishable_placeholder
+        run: |
+          npm run build
+          test -f dist/authbridge-ui/browser/index.html
+      - name: Build refuses a secret key
+        env:
+          NG_APP_SUPABASE_URL: https://placeholder-ref.supabase.co
+          NG_APP_SUPABASE_PUBLISHABLE_KEY: sb_secret_should_fail
+        run: "! node scripts/write-env.mjs"
