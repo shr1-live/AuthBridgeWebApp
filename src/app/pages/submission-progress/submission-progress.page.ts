@@ -6,7 +6,7 @@ import { UiError, toUiError } from '../../core/api/api-error';
 import { AuthorizationStatusDetail, Submission } from '../../core/api/models';
 import { GuideService } from '../../guide/guide.service';
 import { Icon } from '../../shared/icon';
-import { CodeChip, LoadError, PageService, Skeleton, StatusPill, WakingCard, retryWhileWaking } from '../../shared/ui';
+import { CodeChip, LoadError, PageService, Skeleton, StatusPill, WakingCard, payerLabel, retryWhileWaking, serviceLabel } from '../../shared/ui';
 
 const POLL_MS = 4_000;
 const MAX_POLL_MS = 15 * 60_000;
@@ -29,7 +29,7 @@ const MAX_POLL_MS = 15 * 60_000;
           <div class="card-h">
             <div>
               <h2 class="card-t">Submission progress</h2>
-              <p class="card-s">{{ s.authorizationId }}@if (request(); as r) { · {{ r.payerCode }} · {{ r.serviceCode }} }</p>
+              <p class="card-s">{{ s.authorizationId }}@if (request(); as r) { · {{ service(r.serviceCode) }} · {{ payer(r.payerCode) }} }</p>
             </div>
             <ab-status [status]="decided() ? s.requestStatus : s.state === 'Queued' ? 'Submitted' : 'UnderReview'" />
           </div>
@@ -108,6 +108,8 @@ export class SubmissionProgressPage implements OnInit {
   private readonly pageHeader = inject(PageService);
   protected readonly submission = signal<Submission | null>(null);
   protected readonly request = signal<AuthorizationStatusDetail | null>(null);
+  protected readonly service = serviceLabel;
+  protected readonly payer = payerLabel;
   protected readonly error = signal<UiError | null>(null);
   protected readonly waking = signal(0);
   private readonly failedAt = signal(0);

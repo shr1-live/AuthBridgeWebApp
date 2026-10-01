@@ -11,7 +11,7 @@ import { GuideService } from '../../guide/guide.service';
 import { Icon } from '../../shared/icon';
 import {
   CallerService, CodeChip, ErrorAlert, LoadError, PageService, Skeleton, StatusPill, ToastService, WakingCard,
-  docLabel, relativeTime, retryWhileWaking, statusLabel, versionCode,
+  caseStory, docLabel, payerLabel, relativeTime, retryWhileWaking, serviceLabel, statusLabel, versionCode,
 } from '../../shared/ui';
 
 const PRE_SUBMISSION = ['Draft', 'AwaitingDocuments', 'ReadyToSubmit'];
@@ -34,7 +34,7 @@ const STEP_INDEX: Record<string, number> = { Draft: 0, AwaitingDocuments: 1, Rea
           <div class="alert a-warn" role="alert">
             <ab-icon name="alert-triangle" [size]="18" />
             <div><p class="at">Rule inactive — configuration missing</p>
-              <p class="ad">Rule v{{ d.rule.ruleVersion }} for {{ d.serviceCode }} is not active for {{ d.payerCode }}. Validation and submission are blocked until an administrator activates it.</p></div>
+              <p class="ad">Rule v{{ d.rule.ruleVersion }} for {{ service(d.serviceCode) }} is not active for {{ payer(d.payerCode) }}. Validation and submission are blocked until an administrator activates it.</p></div>
           </div>
         }
         <ab-error [error]="actionError()" (retry)="reload()" />
@@ -53,7 +53,7 @@ const STEP_INDEX: Record<string, number> = { Draft: 0, AwaitingDocuments: 1, Rea
                 <h2 class="h1 mono">{{ d.authorizationId }}</h2>
                 <ab-status [status]="d.status" [large]="true" />
               </div>
-              <p class="mono body muted" style="margin-top: 8px">{{ d.payerCode }} · {{ d.serviceCode }} · Member {{ d.memberLabel }}</p>
+              <p class="body muted" style="margin-top: 8px">{{ service(d.serviceCode) }} · {{ payer(d.payerCode) }} · Member <span class="mono">{{ d.memberLabel }}</span></p>
             </div>
             <button type="button" class="btn btn-sec btn-sm" (click)="copyLink()"><ab-icon [name]="copied() ? 'check' : 'copy'" [size]="14" /><span>{{ copied() ? 'Copied' : 'Copy link' }}</span></button>
           </div>
@@ -69,6 +69,13 @@ const STEP_INDEX: Record<string, number> = { Draft: 0, AwaitingDocuments: 1, Rea
               </div>
             }
           </div>
+          @if (story(); as st) {
+            <div class="alert a-info" role="status" style="margin-top: 24px">
+              <ab-icon name="info" [size]="18" />
+              <div><p class="at">What's happening: {{ st.title }}</p>
+                <p class="ad">{{ st.text }} <strong>Next:</strong> {{ st.next }}</p></div>
+            </div>
+          }
         </section>
 
         <div class="detail-grid">
@@ -176,8 +183,8 @@ const STEP_INDEX: Record<string, number> = { Draft: 0, AwaitingDocuments: 1, Rea
               <div class="card-h"><div><h2 class="card-t">Details</h2><p class="card-s">Synthetic record</p></div></div>
               <div>
                 <div class="dl-row"><span class="k">Member</span><span class="v"><span class="mono">{{ d.memberLabel }}</span><span class="cap">(synthetic)</span></span></div>
-                <div class="dl-row"><span class="k">Payer</span><span class="v"><span class="mono">{{ d.payerCode }}</span><span class="cap">(simulated)</span></span></div>
-                <div class="dl-row"><span class="k">Service</span><span class="v mono">{{ d.serviceCode }}</span></div>
+                <div class="dl-row"><span class="k">Payer</span><span class="v">{{ payer(d.payerCode) }}<span class="cap">(simulated)</span></span></div>
+                <div class="dl-row"><span class="k">Service</span><span class="v">{{ service(d.serviceCode) }}<span class="cap mono">{{ d.serviceCode }}</span></span></div>
                 <div class="dl-row"><span class="k">Tenant</span><span class="v"><span class="tenant">{{ d.tenantId }}</span></span></div>
                 <div class="dl-row"><span class="k">Rule version</span><span class="v">v{{ d.rule.ruleVersion }}
                   @if (!d.rule.isActive) { <span class="pill p-warn"><ab-icon name="alert-circle" [size]="12" /><span>inactive</span></span> }</span></div>
@@ -259,6 +266,12 @@ export class AuthorizationDetailPage implements OnInit {
   protected readonly steps = STEPS;
   protected readonly label = statusLabel;
   protected readonly doc = docLabel;
+  protected readonly service = serviceLabel;
+  protected readonly payer = payerLabel;
+  protected readonly story = computed(() => {
+    const d = this.detail();
+    return d ? caseStory(d.status, this.missing()) : null;
+  });
   protected readonly ago = (iso: string | null) => relativeTime(iso);
 
   protected readonly canWrite = this.callers.canWrite;

@@ -9,7 +9,8 @@ import { AUTHORIZATION_STATUSES, AuthorizationSummary, ListFilter } from '../../
 import { GuideService } from '../../guide/guide.service';
 import { Icon } from '../../shared/icon';
 import {
-  ErrorAlert, PageService, Skeleton, StatusPill, ToastService, WakingCard, relativeTime, retryWhileWaking, statusLabel,
+  ErrorAlert, PAYER_CODES, PageService, SERVICE_CODES, Skeleton, StatusPill, ToastService, WakingCard, nextStepShort, payerLabel,
+  relativeTime, retryWhileWaking, serviceLabel, statusLabel,
 } from '../../shared/ui';
 
 const CODE = Validators.pattern(/^[A-Za-z0-9][A-Za-z0-9-]*$/);
@@ -77,8 +78,7 @@ interface Kpi {
             <span class="sel">
               <select class="inp" id="f-payer" formControlName="payerCode">
                 <option value="">All payers</option>
-                <option value="DEMO-PAYER-A">DEMO-PAYER-A</option>
-                <option value="DEMO-PAYER-B">DEMO-PAYER-B</option>
+                @for (p of payers; track p) { <option [value]="p">{{ payer(p) }}</option> }
               </select>
               <ab-icon name="chevron-down" />
             </span>
@@ -88,7 +88,7 @@ interface Kpi {
             <span class="sel">
               <select class="inp" id="f-service" formControlName="serviceCode">
                 <option value="">All services</option>
-                @for (s of services; track s) { <option [value]="s">{{ s }}</option> }
+                @for (s of services; track s) { <option [value]="s">{{ service(s) }}</option> }
               </select>
               <ab-icon name="chevron-down" />
             </span>
@@ -161,9 +161,9 @@ interface Kpi {
                   @for (r of items(); track r.authorizationId) {
                     <tr style="cursor: pointer" (click)="open(r)">
                       <td><a [routerLink]="['/authorizations', r.authorizationId]" class="mono" style="font-size: 13px" (click)="$event.stopPropagation()">{{ r.authorizationId }}</a></td>
-                      <td><ab-status [status]="r.status" /></td>
-                      <td class="hide-sm"><span class="mono" style="font-size: 12px">{{ r.payerCode }}</span></td>
-                      <td class="hide-sm"><span class="mono" style="font-size: 12px">{{ r.serviceCode }}</span></td>
+                      <td><ab-status [status]="r.status" /><p class="cap" style="margin-top: 4px; white-space: nowrap">{{ next(r) }}</p></td>
+                      <td class="hide-sm"><span style="font-size: 13px; white-space: nowrap">{{ payer(r.payerCode) }}</span></td>
+                      <td class="hide-sm"><span style="font-size: 13px; white-space: nowrap">{{ service(r.serviceCode) }}</span></td>
                       <td class="hide-sm"><span style="font-size: 13px">Member <span class="mono">{{ r.memberLabel }}</span></span></td>
                       <td>
                         <div style="min-width: 104px">
@@ -190,7 +190,8 @@ interface Kpi {
                   <span class="mono h3" style="font-size: 15px">{{ r.authorizationId }}</span>
                   <ab-status [status]="r.status" />
                 </div>
-                <span class="mono cap" style="letter-spacing: .02em">{{ r.payerCode }} · {{ r.serviceCode }}</span>
+                <span class="body" style="font-weight: 600">{{ service(r.serviceCode) }}</span>
+                <span class="cap">{{ payer(r.payerCode) }} · {{ next(r) }}</span>
                 <span class="body muted">Member <span class="mono">{{ r.memberLabel }}</span></span>
                 <div class="bar" style="margin-top: 8px" [class.ok]="complete(r)" [class.warn]="!complete(r) && r.validDocumentCount > 0"><i [style.width.%]="pct(r)"></i></div>
                 <div class="between cap"><span>{{ r.validDocumentCount }} of {{ r.requiredDocumentCount }} documents</span><span>{{ ago(r.updatedAtUtc) }}</span></div>
@@ -223,7 +224,11 @@ export class AuthorizationListPage implements OnInit {
   private readonly toasts = inject(ToastService);
   private readonly pageHeader = inject(PageService);
 
-  protected readonly services = ['DEMO-MRI', 'DEMO-CT', 'DEMO-PHYSIO', 'DEMO-SURGERY', 'DEMO-SPECIALIST'];
+  protected readonly services = SERVICE_CODES;
+  protected readonly payers = PAYER_CODES;
+  protected readonly service = serviceLabel;
+  protected readonly payer = payerLabel;
+  protected readonly next = (r: AuthorizationSummary) => nextStepShort(r.status, r.validDocumentCount, r.requiredDocumentCount);
   protected readonly statuses = computed(() => (this.mode() === 'submissions' ? SUBMITTED : AUTHORIZATION_STATUSES));
   protected readonly noun = computed(() => (this.mode() === 'submissions' ? 'submissions' : 'requests'));
   protected readonly label = statusLabel;
@@ -259,8 +264,8 @@ export class AuthorizationListPage implements OnInit {
     const a = this.applied();
     const chips: { key: keyof Filters; name: string; value: string }[] = [];
     if (a.status) chips.push({ key: 'status', name: 'Status', value: statusLabel(a.status) });
-    if (a.payerCode) chips.push({ key: 'payerCode', name: 'Payer', value: a.payerCode });
-    if (a.serviceCode) chips.push({ key: 'serviceCode', name: 'Service', value: a.serviceCode });
+    if (a.payerCode) chips.push({ key: 'payerCode', name: 'Payer', value: payerLabel(a.payerCode) });
+    if (a.serviceCode) chips.push({ key: 'serviceCode', name: 'Service', value: serviceLabel(a.serviceCode) });
     if (a.search) chips.push({ key: 'search', name: 'ID', value: a.search });
     return chips;
   });
@@ -423,7 +428,7 @@ export class AuthorizationListPage implements OnInit {
       return;
     }
     if (this.page() !== 1) return;
-    const scope = this.applied().payerCode ? ` for ${this.applied().payerCode}` : '';
+    const scope = this.applied().payerCode ? ` for ${payerLabel(this.applied().payerCode ?? '')}` : '';
     this.toasts.show(this.hasFilters() ? 'Filters applied' : 'Filters cleared', `Showing ${this.total()} of ${this.scopeTotal()} ${this.noun()}${scope}.`);
   }
 

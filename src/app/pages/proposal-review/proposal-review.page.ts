@@ -9,7 +9,8 @@ import { Proposal } from '../../core/api/models';
 import { GuideService } from '../../guide/guide.service';
 import { Icon } from '../../shared/icon';
 import {
-  CallerService, CodeChip, ErrorAlert, LoadError, PageService, Skeleton, StatusPill, WakingCard, retryWhileWaking, versionCode,
+  CallerService, CodeChip, ErrorAlert, LoadError, PageService, Skeleton, StatusPill, WakingCard, payerLabel, retryWhileWaking,
+  serviceLabel, versionCode,
 } from '../../shared/ui';
 
 const LIFETIME_MS = 5 * 60_000;
@@ -70,8 +71,8 @@ function idempotencyKeyFor(proposalId: string): string {
           </div>
           <div class="dl-row"><span class="k">Request</span><span class="v"><a class="mono" [routerLink]="['/authorizations', p.authorizationId]">{{ p.authorizationId }}</a></span></div>
           <div class="dl-row"><span class="k">Member</span><span class="v"><span class="mono">{{ p.memberLabel }}</span><span class="cap">(synthetic)</span></span></div>
-          <div class="dl-row"><span class="k">Payer</span><span class="v"><span class="mono">{{ p.payerCode }}</span><span class="cap">(simulated)</span></span></div>
-          <div class="dl-row"><span class="k">Service</span><span class="v mono">{{ p.serviceCode }}</span></div>
+          <div class="dl-row"><span class="k">Payer</span><span class="v">{{ payer(p.payerCode) }}<span class="cap">(simulated)</span></span></div>
+          <div class="dl-row"><span class="k">Service</span><span class="v">{{ service(p.serviceCode) }}</span></div>
           <div class="dl-row"><span class="k">Rule version</span><span class="v">v{{ p.ruleVersion }} · <ab-code [value]="code()" /></span></div>
           <div class="dl-row" style="align-items: flex-start"><span class="k">Action</span>
             <span class="v" style="flex-direction: column; align-items: flex-end; gap: 2px"><span>Send a simulated prior-authorization submission.</span><span class="cap">No real payer is contacted.</span></span></div>
@@ -155,6 +156,8 @@ export class ProposalReviewPage implements OnInit {
   private readonly pageHeader = inject(PageService);
   protected readonly guide = inject(GuideService);
   protected readonly canWrite = this.callers.canWrite;
+  protected readonly service = serviceLabel;
+  protected readonly payer = payerLabel;
 
   protected readonly proposal = signal<Proposal | null>(null);
   protected readonly loadError = signal<UiError | null>(null);

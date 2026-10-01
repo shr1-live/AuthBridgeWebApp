@@ -58,6 +58,82 @@ export function relativeTime(iso: string | null | undefined, now = Date.now()): 
   return days === 1 ? 'Yesterday' : `${days}d ago`;
 }
 
+/* Plain-English names for the synthetic codes. Invented demo values: no real payer or service. */
+const SERVICE_LABELS: Record<string, string> = {
+  'DEMO-MRI': 'MRI scan',
+  'DEMO-CT': 'CT scan',
+  'DEMO-ULTRASOUND': 'Ultrasound scan',
+  'DEMO-PHYSIO': 'Physiotherapy',
+  'DEMO-REHAB': 'Rehab programme',
+  'DEMO-SURGERY': 'Planned surgery',
+  'DEMO-SPECIALIST': 'Specialist visit',
+};
+const PAYER_LABELS: Record<string, string> = {
+  'DEMO-PAYER-A': 'Demo Health Plan A',
+  'DEMO-PAYER-B': 'Demo Health Plan B',
+};
+export const SERVICE_CODES = Object.keys(SERVICE_LABELS);
+export const PAYER_CODES = Object.keys(PAYER_LABELS);
+export const serviceLabel = (code: string): string => SERVICE_LABELS[code] ?? code;
+export const payerLabel = (code: string): string => PAYER_LABELS[code] ?? code;
+
+/** A two-or-three word "what happens next" for list rows. */
+export function nextStepShort(status: string, valid: number, required: number): string {
+  switch (status) {
+    case 'Draft':
+    case 'AwaitingDocuments': {
+      const left = Math.max(required - valid, 0);
+      return left === 0 ? 'Ready to validate' : `${left} document${left === 1 ? '' : 's'} needed`;
+    }
+    case 'ReadyToSubmit': return 'Ready to send';
+    case 'Submitted': return 'Waiting for payer';
+    case 'UnderReview': return 'Payer reviewing';
+    case 'Approved': return 'Done';
+    case 'Denied': return 'Not approved';
+    default: return '';
+  }
+}
+
+export interface CaseStory {
+  title: string;
+  text: string;
+  next: string;
+}
+
+/** One plain-English paragraph explaining where a request is and what to do next. */
+export function caseStory(
+  status: string,
+  docs: { missing: string[]; invalid: string[] } | null,
+): CaseStory {
+  const names = (types: string[]) => types.map((t) => docLabel(t).toLowerCase()).join(' and ');
+  switch (status) {
+    case 'Draft':
+    case 'AwaitingDocuments': {
+      const missing = docs?.missing ?? [];
+      const invalid = docs?.invalid ?? [];
+      const problems = [
+        missing.length ? `the ${names(missing)} ${missing.length === 1 ? 'is' : 'are'} not attached yet` : '',
+        invalid.length ? `the ${names(invalid)} ${invalid.length === 1 ? 'needs' : 'need'} replacing (unsigned, incomplete or out of date)` : '',
+      ].filter(Boolean);
+      return problems.length
+        ? { title: 'Paperwork still needed', text: `Before this can go to the payer, ${problems.join(', and ')}.`, next: 'Attach a valid copy of each document, then press Validate.' }
+        : { title: 'Paperwork looks complete', text: 'Every document on the checklist is attached and valid.', next: 'Press Validate to move the request to Ready to submit.' };
+    }
+    case 'ReadyToSubmit':
+      return { title: 'Ready to send', text: 'All the paperwork is in order.', next: 'Prepare the submission. A coordinator then reviews and approves it — nothing is sent without that click.' };
+    case 'Submitted':
+      return { title: 'Sent to the payer', text: 'The request was approved by a coordinator and sent to the simulated payer.', next: 'Nothing to do. The decision usually arrives within a minute.' };
+    case 'UnderReview':
+      return { title: 'Payer is reviewing', text: 'The simulated payer has the request and is making a decision.', next: 'Nothing to do. Check back shortly.' };
+    case 'Approved':
+      return { title: 'Approved', text: 'The simulated payer approved this request.', next: 'Nothing more to do. The history below shows every step.' };
+    case 'Denied':
+      return { title: 'Not approved', text: 'The simulated payer denied this request.', next: 'Read the history below to see who did what and when.' };
+    default:
+      return { title: statusLabel(status), text: '', next: '' };
+  }
+}
+
 /** Short, quotable form of a request version, e.g. A104-RV1-7F3C. */
 export function versionCode(publicId: string, ruleVersion: string, version: string): string {
   return `${publicId.replace(/^AUTH-/, 'A')}-RV${ruleVersion}-${version.replace(/-/g, '').slice(0, 4).toUpperCase()}`;
