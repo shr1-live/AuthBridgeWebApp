@@ -34,7 +34,7 @@ export function saveBackendUrl(value: string): string | null {
   try {
     url = new URL(value.trim());
   } catch {
-    return 'Enter a full URL, for example https://authbridge-api.onrender.com';
+    return 'Enter a full URL, for example https://authbridgewebapi.onrender.com';
   }
   const local = url.hostname === 'localhost' || url.hostname === '127.0.0.1';
   if (url.protocol !== 'https:' && !(local && url.protocol === 'http:')) return 'The backend URL must start with https://';

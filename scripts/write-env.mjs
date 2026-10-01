@@ -21,7 +21,7 @@ if (production) {
 }
 
 const config = {
-  apiBaseUrl: apiBaseUrl || (production ? 'https://authbridge-api.onrender.com' : 'http://localhost:5243'),
+  apiBaseUrl: apiBaseUrl || (production ? 'https://authbridgewebapi.onrender.com' : 'http://localhost:5243'),
   authMode: production ? 'demo' : 'localDev',
 };
 

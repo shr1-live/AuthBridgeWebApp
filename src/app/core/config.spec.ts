@@ -1,12 +1,12 @@
 import { AppConfig, forgetBackendUrl, resolveConfig, saveBackendUrl } from './config';
 
-const built: AppConfig = { apiBaseUrl: 'https://authbridge-api.onrender.com', authMode: 'demo' };
+const built: AppConfig = { apiBaseUrl: 'https://authbridgewebapi.onrender.com', authMode: 'demo' };
 
 describe('backend URL override', () => {
   afterEach(() => forgetBackendUrl());
 
   it('uses the built URL until the viewer saves another', () => {
-    expect(resolveConfig(built).apiBaseUrl).toBe('https://authbridge-api.onrender.com');
+    expect(resolveConfig(built).apiBaseUrl).toBe('https://authbridgewebapi.onrender.com');
     expect(saveBackendUrl(' https://my-api.onrender.com/some/path ')).toBeNull();
     expect(resolveConfig(built).apiBaseUrl).toBe('https://my-api.onrender.com');
   });
