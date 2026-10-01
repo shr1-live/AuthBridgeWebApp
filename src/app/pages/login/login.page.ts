@@ -1,6 +1,7 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { AuthService, LocalDevUser } from '../../core/auth/auth.service';
+import { APP_CONFIG, forgetBackendUrl, saveBackendUrl, storedBackendUrl } from '../../core/config';
 import { Icon } from '../../shared/icon';
 import { initials } from '../../shared/ui';
 
@@ -66,6 +67,18 @@ import { initials } from '../../shared/ui';
               @if (error(); as message) {
                 <div class="alert a-danger" role="alert" style="margin-top: 16px"><ab-icon name="alert-circle" [size]="18" /><div><p class="at">Can't sign in</p><p class="ad">{{ message }}</p></div></div>
               }
+              @if (unreachable()) {
+                <form (submit)="connect($event, backend.value)" style="display: flex; flex-direction: column; gap: 10px; margin-top: 16px">
+                  <div class="field"><label class="lbl" for="backend">Backend URL</label>
+                    <input #backend class="inp" id="backend" type="url" [value]="apiBaseUrl" autocomplete="url" [class.is-err]="!!backendError()" />
+                    @if (backendError(); as message) { <p class="err-txt"><ab-icon name="alert-circle" [size]="14" />{{ message }}</p> }
+                  </div>
+                  <div style="display: flex; gap: 8px">
+                    <button type="submit" class="btn btn-pri btn-sm">Connect</button>
+                    @if (overridden) { <button type="button" class="btn btn-ghost btn-sm" (click)="disconnect()">Use the default URL</button> }
+                  </div>
+                </form>
+              }
               <p class="cap" style="margin-top: 16px">For demonstration only. No real patient, payer, or clinical data.</p>
             </section>
         </div>
@@ -81,6 +94,11 @@ export class LoginPage implements OnInit {
   /** The tenant chip already shows the tenant, so drop a trailing "(Tenant A)". */
   protected readonly shortName = (label: string) => label.replace(/\s*\(.*\)\s*$/, '');
 
+  protected readonly apiBaseUrl = inject(APP_CONFIG).apiBaseUrl;
+  /** True when this browser replaced the built-in backend URL. */
+  protected readonly overridden = !!storedBackendUrl();
+  protected readonly unreachable = signal(false);
+  protected readonly backendError = signal<string | null>(null);
   protected readonly users = signal<LocalDevUser[]>([]);
   protected readonly busy = signal(false);
   protected readonly error = signal<string | null>(null);
@@ -95,9 +113,24 @@ export class LoginPage implements OnInit {
         const users = await this.auth.localDevUsers();
         this.users.set(users.sort((a, b) => rank(a) - rank(b) || a.tenantId.localeCompare(b.tenantId) || a.displayLabel.localeCompare(b.displayLabel)));
       } catch {
-        this.error.set('The backend is not reachable. Start it with: dotnet run --project src/AuthBridge.Api');
+        this.unreachable.set(true);
+        this.error.set(this.auth.mode === 'demo'
+          ? `The backend at ${this.apiBaseUrl} did not answer. A sleeping Render free service can take a minute to wake: reload, or enter the right URL below.`
+          : 'The backend is not reachable. Start it with: dotnet run --project src/AuthBridge.Api');
       }
     }
+  }
+
+  protected connect(event: Event, value: string): void {
+    event.preventDefault();
+    const error = saveBackendUrl(value);
+    this.backendError.set(error);
+    if (!error) location.reload();
+  }
+
+  protected disconnect(): void {
+    forgetBackendUrl();
+    location.reload();
   }
 
   protected signInAs(user: LocalDevUser): Promise<void> {

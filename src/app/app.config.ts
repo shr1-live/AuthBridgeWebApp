@@ -5,12 +5,12 @@ import { generatedConfig } from '../environments/environment.generated';
 import { routes } from './app.routes';
 import { authInterceptor } from './core/auth/auth.interceptor';
 import { AuthService } from './core/auth/auth.service';
-import { APP_CONFIG } from './core/config';
+import { APP_CONFIG, resolveConfig } from './core/config';
 
 export const appConfig: ApplicationConfig = {
   providers: [
     provideBrowserGlobalErrorListeners(),
-    { provide: APP_CONFIG, useValue: generatedConfig },
+    { provide: APP_CONFIG, useFactory: () => resolveConfig(generatedConfig) },
     provideRouter(routes, withComponentInputBinding()),
     provideHttpClient(withInterceptors([authInterceptor])),
     // Restore any existing session before the first route guard runs.
