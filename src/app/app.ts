@@ -42,6 +42,9 @@ import { CallerService, PageService, StateCard, ThemeService, Toasts, initials }
                 <a class="nav-i" routerLink="/activity" routerLinkActive="on" title="Activity">
                   <ab-icon name="activity" [size]="18" /><span>Activity</span>
                 </a>
+                <a class="nav-i" routerLink="/assistant" routerLinkActive="on" title="Assistant">
+                  <ab-icon name="sparkles" [size]="18" /><span>Assistant</span>
+                </a>
               </nav>
             } @else {
               <div style="flex: 1"></div>

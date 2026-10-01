@@ -3,6 +3,9 @@ import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 import { APP_CONFIG } from '../config';
 import {
+  AssistantInfo,
+  AssistantMessage,
+  AssistantReply,
   AuthorizationStatusDetail,
   AuthorizationSummary,
   Caller,
@@ -86,5 +89,14 @@ export class ApiService {
 
   submission(attemptId: string): Observable<Submission> {
     return this.http.get<Submission>(`${this.base}/submissions/${encodeURIComponent(attemptId)}`);
+  }
+
+  assistant(): Observable<AssistantInfo> {
+    return this.http.get<AssistantInfo>(`${this.base}/assistant`);
+  }
+
+  /** Sends the whole visible conversation; the server keeps no chat state. */
+  ask(messages: AssistantMessage[]): Observable<AssistantReply> {
+    return this.http.post<AssistantReply>(`${this.base}/assistant/messages`, { messages });
   }
 }

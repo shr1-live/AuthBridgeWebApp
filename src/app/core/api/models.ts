@@ -171,3 +171,37 @@ export interface ListFilter {
   page: number;
   pageSize: number;
 }
+
+/** The in-app assistant: an MCP client of this server's own /mcp endpoint. */
+export interface AssistantToolInfo {
+  name: string;
+  title: string | null;
+  description: string | null;
+  readOnly: boolean;
+}
+
+export interface AssistantInfo {
+  enabled: boolean;
+  model: string;
+  tools: AssistantToolInfo[];
+}
+
+export interface AssistantMessage {
+  role: 'user' | 'assistant';
+  text: string;
+}
+
+/** One MCP tool call made while answering, exactly as /mcp returned it. */
+export interface AssistantToolStep {
+  tool: string;
+  input: Record<string, unknown>;
+  ok: boolean;
+  errorCode: string | null;
+  result: { ok?: boolean; data?: Record<string, unknown>; error?: { code: string; message: string } } | null;
+}
+
+export interface AssistantReply {
+  text: string;
+  steps: AssistantToolStep[];
+  model: string;
+}

@@ -16,6 +16,12 @@ export const routes: Routes = [
     loadComponent: () => import('./pages/activity/activity.page').then((m) => m.ActivityPage),
   },
   {
+    path: 'assistant',
+    title: 'Assistant · AuthBridge',
+    canActivate: [authGuard],
+    loadComponent: () => import('./pages/assistant/assistant.page').then((m) => m.AssistantPage),
+  },
+  {
     path: 'authorizations/:id',
     title: 'Request · AuthBridge',
     canActivate: [authGuard],

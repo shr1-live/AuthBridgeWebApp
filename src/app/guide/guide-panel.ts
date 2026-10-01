@@ -58,6 +58,17 @@ function helpFor(url: string): PageHelp {
       what: 'Requests that have been sent to the simulated payer, newest first.',
       points: ['Open one to follow its progress or see the decision.', 'Decisions come from fixture scenarios, never from an AI.'],
     };
+  if (url.startsWith('/assistant'))
+    return {
+      title: 'Assistant',
+      what: 'Chat with Claude about your requests. It is a real MCP client of this server.',
+      points: [
+        'The server connects to its own /mcp endpoint with your token, exactly like an external AI.',
+        'Open any tool call to see the input the model chose and the result /mcp returned.',
+        'Tenant and role still apply: try AUTH-204 from tenant A, or ask a viewer to prepare.',
+        'It can prepare a submission, but only you can approve it on the review page.',
+      ],
+    };
   if (url.startsWith('/activity'))
     return {
       title: 'Activity',

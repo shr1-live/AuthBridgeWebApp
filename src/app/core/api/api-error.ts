@@ -32,6 +32,16 @@ export function toUiError(error: unknown): UiError {
   const correlationId = body.correlationId ?? error.headers?.get('X-Correlation-Id') ?? undefined;
   const detail = body.detail;
 
+  // The assistant reports its own 503s (no API key, model unreachable, daily cap) and 429s.
+  if (code.startsWith('ASSISTANT_') || error.status === 429) {
+    return {
+      kind: 'server',
+      code,
+      message: detail ?? 'The assistant is not available right now.',
+      correlationId,
+      retryable: code !== 'ASSISTANT_NOT_CONFIGURED',
+    };
+  }
   if (error.status === 0 || error.status === 502 || error.status === 503 || error.status === 504) {
     return {
       kind: 'waking',
